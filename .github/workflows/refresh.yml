@@ -53,6 +53,18 @@ jobs:
       - name: Check the payload is complete
         run: python export/check_payload.py
 
+      # site/config.js is gitignored, so the deployed copy is written here from the secret.
+      # Without it the map falls back to Esri's keyless basemap rather than to CARTO's
+      # "API KEY REQUIRED" watermark tile.
+      - name: Write basemap config
+        env:
+          CARTO_API_KEY: ${{ secrets.CARTO_API_KEY }}
+        run: |
+          if [ -z "$CARTO_API_KEY" ]; then
+            echo "::warning::CARTO_API_KEY secret is not set; falling back to the Esri basemap."
+          fi
+          echo "window.CARTO_API_KEY = \"$CARTO_API_KEY\";" > site/config.js
+
       - uses: actions/configure-pages@v5
 
       # site/data is built here rather than committed: the payload is ~6 MB of binary

@@ -15,25 +15,43 @@
 /* ------------------------------------------------------------------ config ------------ */
 
 const DATA = "data/";
-/* Basemap: Esri's grey canvas, which needs no API key and is deliberately desaturated --
- * the right backdrop for a map whose whole payload is coloured dots.
+/* Basemap: CARTO's grey canvas, matching the other maps on the site. Deliberately
+ * desaturated -- the right backdrop for a map whose whole payload is coloured dots.
  *
- * Not CARTO: their basemaps now return a watermarked "API KEY REQUIRED" placeholder for
- * unauthenticated requests from any origin (the sibling to-multiplex-map still points at
- * them and is affected). If you get a CARTO key, swapping back is a two-line change here.
+ * CARTO answers unauthenticated requests with an "API KEY REQUIRED" watermark tile (HTTP
+ * 200, normal-looking PNG, so it fails silently), and the keyed endpoint is a different
+ * shape: under rastertiles/, takes ?key=, and has no {s} subdomain. site/config.js sets
+ * the key and is written at deploy time from a repo secret.
  *
- * Esri serves real tiles to zoom 16; MAX_NATIVE_ZOOM lets Leaflet upscale beyond that
- * rather than showing blank tiles. The trees stay crisp either way -- they're drawn on a
- * canvas, not baked into the tiles. */
-const TILES = {
+ * With no key we fall back to Esri's keyless grey canvas rather than to a watermarked
+ * CARTO, so `python -m http.server` in site/ gives a working map with no setup. Esri only
+ * serves real tiles to zoom 16, hence the per-source native zoom; the trees stay crisp
+ * either way, since they're drawn on a canvas rather than baked into the tiles. */
+const ESRI = {
   light: "https://services.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}",
   dark: "https://services.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}",
 };
-const MAX_NATIVE_ZOOM = 16;
-const TILE_ATTRIBUTION =
+const CARTO_ATTRIBUTION =
+  'Basemap &copy; <a href="https://carto.com/attributions">CARTO</a>, ' +
+  '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &middot; ' +
+  'Trees: <a href="https://open.toronto.ca/dataset/street-tree-data/">City of Toronto</a>';
+const ESRI_ATTRIBUTION =
   'Basemap &copy; <a href="https://www.esri.com/">Esri</a>, HERE, Garmin, ' +
   '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &middot; ' +
   'Trees: <a href="https://open.toronto.ca/dataset/street-tree-data/">City of Toronto</a>';
+
+function basemapSource(dark) {
+  const key = (window.CARTO_API_KEY || "").trim();
+  if (key) {
+    return {
+      url: "https://basemaps.cartocdn.com/rastertiles/" + (dark ? "dark_all" : "light_all") +
+           "/{z}/{x}/{y}{r}.png?key=" + encodeURIComponent(key),
+      attribution: CARTO_ATTRIBUTION,
+      maxNativeZoom: 19,
+    };
+  }
+  return { url: dark ? ESRI.dark : ESRI.light, attribution: ESRI_ATTRIBUTION, maxNativeZoom: 16 };
+}
 
 const TORONTO_CENTER = [43.7, -79.38];
 const DEFAULT_ZOOM = 11;
@@ -1276,10 +1294,12 @@ async function loadWardLayer() {
 let baseLayer = null;
 function makeBaseLayer() {
   const dark = window.matchMedia("(prefers-color-scheme: dark)").matches;
-  return L.tileLayer(dark ? TILES.dark : TILES.light, {
-    attribution: TILE_ATTRIBUTION,
+  const source = basemapSource(dark);
+  return L.tileLayer(source.url, {
+    attribution: source.attribution,
     maxZoom: 19,
-    maxNativeZoom: MAX_NATIVE_ZOOM,
+    maxNativeZoom: source.maxNativeZoom,
+    detectRetina: true,
   });
 }
 
