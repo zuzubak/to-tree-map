@@ -46,6 +46,15 @@ gridded as (
     from joined
 )
 
-select * exclude (grid_cell)
+-- tree_index makes the row order an explicit column rather than a property of how DuckDB
+-- happened to materialise the table: the export orders by it, so two rebuilds of the same
+-- input produce byte-identical output.
+--
+-- object_id breaks ties in the spatial sort. 193,559 trees share an exact lon/lat with
+-- another tree -- the City geocodes to the parcel, so every tree at one address lands on
+-- the same point -- and without a unique tiebreaker that ordering is arbitrary.
+select
+    row_number() over (order by grid_cell, lon, lat, object_id) - 1 as tree_index,
+    * exclude (grid_cell)
 from gridded
-order by grid_cell, lon, lat
+order by tree_index

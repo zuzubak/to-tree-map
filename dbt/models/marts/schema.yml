@@ -23,6 +23,9 @@ models:
   - name: street_trees
     description: One row per tree, joined to taxon and ward, spatially ordered for compression.
     columns:
+      - name: tree_index
+        description: Dense 0-based row order the exported binary columns are written in.
+        tests: [unique, not_null]
       - name: object_id
         tests: [unique, not_null]
       - name: taxon_id

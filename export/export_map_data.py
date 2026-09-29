@@ -23,8 +23,10 @@ Everything is gzipped here and inflated in the browser with DecompressionStream.
 Pages won't negotiate gzip for application/octet-stream, so compressing in the file itself
 is the only way to avoid shipping 20 MB.
 
-Rows arrive already sorted spatially by the street_trees model; that ordering is what makes
-the street-name and taxon columns compress well, so don't re-sort here.
+Rows are ordered by the street_trees model's `tree_index`, a spatial ordering that puts
+neighbouring trees next to each other -- which is what makes the street-name and taxon
+columns compress. Don't re-sort here, and don't drop the ORDER BY: without it the output
+depends on how DuckDB happened to materialise the table and stops being reproducible.
 """
 from __future__ import annotations
 
@@ -52,8 +54,12 @@ def write_column(name: str, array: np.ndarray) -> dict:
     """Gzip one typed array into site/data and describe it for the manifest."""
     raw = array.tobytes()
     path = OUT_DIR / f"{name}.gz"
-    with gzip.open(path, "wb", compresslevel=9) as fh:
-        fh.write(raw)
+    # mtime=0 and no embedded filename: gzip otherwise stamps the current time into the
+    # header, so an unchanged dataset would produce a different file on every run and
+    # defeat HTTP caching for readers who already have it.
+    with path.open("wb") as fh:
+        with gzip.GzipFile(filename="", mode="wb", compresslevel=9, fileobj=fh, mtime=0) as gz:
+            gz.write(raw)
     size = path.stat().st_size
     print(f"  {name:<16} {len(raw) / 1e6:>6.2f} MB raw -> {size / 1e6:>5.2f} MB gz")
     return {"file": f"{name}.gz", "dtype": str(array.dtype), "bytes": size, "raw_bytes": len(raw)}
@@ -70,18 +76,26 @@ def main() -> None:
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     con = duckdb.connect(str(DB_PATH), read_only=True)
 
+    # fetchnumpy() rather than arrow(): duckdb 1.1.3 and a current pyarrow abort the
+    # process outright ("PyEval_SaveThread: the function must be called with the GIL
+    # held") when both are loaded, and nothing here needs Arrow. Nullable integer
+    # columns come back as masked arrays, hence the explicit fills.
     trees = con.execute(
         """
         select taxon_id, dbh_cm, lon, lat, address, street_name,
                cross_street_1, cross_street_2, ward
         from street_trees
+        order by tree_index
         """
-    ).arrow()
-    n = trees.num_rows
+    ).fetchnumpy()
+    n = len(trees["taxon_id"])
     print(f"Exporting {n:,} trees")
 
-    lon = np.asarray(trees["lon"], dtype=np.float64)
-    lat = np.asarray(trees["lat"], dtype=np.float64)
+    def filled(name: str, default: int = 0) -> np.ndarray:
+        return np.ma.filled(trees[name], default)
+
+    lon = np.asarray(filled("lon", 0.0), dtype=np.float64)
+    lat = np.asarray(filled("lat", 0.0), dtype=np.float64)
     origin_lon = float(np.floor(lon.min() * 100) / 100)
     origin_lat = float(np.floor(lat.min() * 100) / 100)
 
@@ -89,17 +103,13 @@ def main() -> None:
     coords[:n] = np.rint((lon - origin_lon) * COORD_SCALE).astype(np.uint32)
     coords[n:] = np.rint((lat - origin_lat) * COORD_SCALE).astype(np.uint32)
 
-    taxon = np.asarray(trees["taxon_id"], dtype=np.uint16)
+    taxon = np.asarray(filled("taxon_id"), dtype=np.uint16)
+    dbh = np.clip(filled("dbh_cm"), 0, U16_MAX).astype(np.uint16)
+    addr = np.clip(filled("address"), 0, U16_MAX).astype(np.uint16)
 
-    dbh_raw = trees["dbh_cm"].to_pandas()
-    dbh = dbh_raw.fillna(0).clip(0, U16_MAX).astype(np.uint16).to_numpy()
-
-    addr_raw = trees["address"].to_pandas()
-    addr = addr_raw.fillna(0).clip(0, U16_MAX).astype(np.uint16).to_numpy()
-
-    street_names = trees["street_name"].to_pylist()
-    cross1_names = trees["cross_street_1"].to_pylist()
-    cross2_names = trees["cross_street_2"].to_pylist()
+    street_names = list(trees["street_name"])
+    cross1_names = list(trees["cross_street_1"])
+    cross2_names = list(trees["cross_street_2"])
     streets, street_ids = build_dictionary(street_names + cross1_names + cross2_names)
 
     def encode(names: list[str | None]) -> np.ndarray:
@@ -108,7 +118,7 @@ def main() -> None:
         )
 
     ward = np.fromiter(
-        (int(w) if w and w.isdigit() else 0 for w in trees["ward"].to_pylist()),
+        (int(w) if w and str(w).isdigit() else 0 for w in trees["ward"]),
         dtype=np.uint8, count=n,
     )
 
