@@ -47,7 +47,7 @@ function basemapSource(dark) {
       url: "https://basemaps.cartocdn.com/rastertiles/" + (dark ? "dark_all" : "light_all") +
            "/{z}/{x}/{y}{r}.png?key=" + encodeURIComponent(key),
       attribution: CARTO_ATTRIBUTION,
-      maxNativeZoom: 19,
+      maxNativeZoom: 20,
     };
   }
   return { url: dark ? ESRI.dark : ESRI.light, attribution: ESRI_ATTRIBUTION, maxNativeZoom: 16 };
@@ -55,6 +55,9 @@ function basemapSource(dark) {
 
 const TORONTO_CENTER = [43.7, -79.38];
 const DEFAULT_ZOOM = 11;
+/* CARTO serves real raster tiles to z20, so that's where the map stops -- going further
+ * would only upscale, which is what made the old Esri basemap go grainy past z16. */
+const MAX_ZOOM = 20;
 
 /* Above this zoom, trees are drawn as circles scaled by trunk diameter; below it, as
  * 1-2 px dots in a pixel buffer. The crossover is where a viewport holds few enough
@@ -198,7 +201,7 @@ const state = {
   dbhMin: 0,
   dbhMax: 200,
   dbhIncludeUnknown: true,
-  ward: "",
+  wards: new Set(),   // every ward code, populated once the metadata lands
   selectedTree: -1,
 };
 
@@ -311,7 +314,10 @@ function recomputeVisible() {
     state.origin.has("invasive"),
   ];
   const { dbhMin, dbhMax, dbhIncludeUnknown } = state;
-  const wardFilter = state.ward ? parseInt(state.ward, 10) : 0;
+  const wards = state.wards;
+  // A tree the City left without a ward survives only while every ward is ticked, so
+  // "all wards" still means everything and narrowing never silently includes strays.
+  const allWards = wards.size === meta.wards.length;
 
   // Turn the selected genus/species names into a fast per-taxon lookup.
   let taxonAllowed = null;
@@ -335,7 +341,8 @@ function recomputeVisible() {
     if (d === 0) {
       if (!dbhIncludeUnknown) continue;
     } else if (d < dbhMin || d > dbhMax) continue;
-    if (wardFilter && ward[i] !== wardFilter) continue;
+    const w = ward[i];
+    if (w === 0 ? !allWards : !wards.has(w)) continue;
     visible[i] = 1;
     count++;
   }
@@ -683,132 +690,237 @@ const TreeLayer = L.Renderer.extend({
   },
 });
 
-/* ------------------------------------------------------------------ UI: rendering ------ */
+/* ------------------------------------------------------------------ UI: the filter bar -- */
+
+/* The whole bar is rendered from this table, the way the permit map renders its own, so
+ * adding a filter is a one-line change and there's no second copy of the markup to drift.
+ * `on` is the default state a first-time visitor sees. */
+const CHIP_GROUPS = [
+  {
+    key: "colourMode", label: "Colour by", single: true,
+    options: [
+      { value: "origin", label: "Native or not", on: true },
+      { value: "compare", label: "Compare species", on: false },
+      { value: "dbh", label: "Trunk size", on: false },
+      { value: "genus", label: "Genus", on: false },
+    ],
+  },
+  {
+    key: "origin", label: "Origin",
+    options: [
+      { value: "native", label: "Native to Ontario", on: true, swatch: "var(--series-native)" },
+      { value: "non_native", label: "Introduced", on: true, swatch: "var(--series-introduced)" },
+      { value: "invasive", label: "Invasive", on: true, swatch: "var(--series-invasive)" },
+      { value: "unknown", label: "Not identified to species", on: true, swatch: "var(--series-unknown)" },
+    ],
+  },
+  {
+    key: "taxonLevel", label: "Species &amp; genus", single: true,
+    options: [
+      { value: "genus", label: "By genus", on: true },
+      { value: "species", label: "By species", on: false },
+    ],
+  },
+];
 
 const el = (id) => document.getElementById(id);
 let map = null;
 let treeLayer = null;
 let wardLayer = null;
 let visibleCount = 0;
+let openPopup = null;
 
-function renderStats() {
-  const s = meta.summary;
-  const scoped = state.ward || state.selectedTaxa.size || visibleCount !== trees.n;
-  const tiles = [
-    ["Trees shown", fmtCompact.format(visibleCount)],
-    ["Native to Ontario", `${s.native_pct}%`],
-    ["Species", num(s.species_count)],
-    ["Invasive", fmtCompact.format(s.invasive_count)],
-  ];
-  if (scoped) tiles[1] = ["Of all trees", fmtCompact.format(trees.n)];
-  el("stats").innerHTML = tiles
-    .map(([label, value]) => `<div class="stat-tile"><div class="stat-value">${value}</div><div class="stat-label">${label}</div></div>`)
-    .join("");
+function chip(label, active, swatch) {
+  const b = document.createElement("button");
+  b.type = "button";
+  b.className = "filter-chip";
+  b.dataset.active = String(active);
+  if (swatch) {
+    const sw = document.createElement("span");
+    sw.className = "swatch";
+    sw.style.background = swatch;
+    b.appendChild(sw);
+  }
+  b.appendChild(document.createTextNode(label));
+  return b;
 }
 
-function renderLegend() {
-  const box = el("legend");
-  const mode = state.colourMode;
+function renderFilterBar() {
+  const bar = el("filter-bar");
+  bar.textContent = "";
 
-  if (mode === "dbh") {
-    const steps = palette.css.slice(1);
-    box.innerHTML =
-      `<div class="ramp-legend"><div class="ramp-bar">${steps.map((c) => `<span style="background:${c}"></span>`).join("")}</div>` +
-      `<div class="ramp-labels"><span>thin</span><span>trunk diameter</span><span>thick</span></div>` +
-      `<div class="legend-row"><span class="swatch" style="background:${palette.css[0]}"></span><span>No diameter recorded</span></div></div>`;
-    return;
-  }
+  for (const group of CHIP_GROUPS) {
+    const wrap = document.createElement("div");
+    wrap.className = "filter-group";
+    const label = document.createElement("span");
+    label.className = "filter-group-label";
+    label.innerHTML = group.label;
+    wrap.appendChild(label);
 
-  if (mode === "compare") {
-    const slots = [];
-    for (let i = 0; i < COMPARE_LIMIT; i++) {
-      const entry = state.compare[i];
-      slots.push(
-        `<div class="compare-slot" data-filled="${!!entry}">` +
-          `<span class="swatch" style="background:${palette.css[i + 1]}"></span>` +
-          `<span class="cs-name">${entry ? entry.label : "Pick from the list below"}</span>` +
-          (entry ? `<span class="cs-count">${fmtCompact.format(entry.count)}</span><button class="cs-remove" data-remove="${i}" aria-label="Remove ${entry.label}">&times;</button>` : "") +
-        `</div>`
-      );
+    for (const opt of group.options) {
+      const active = group.single
+        ? state[group.key] === opt.value
+        : state[group.key].has(opt.value);
+      const b = chip(opt.label, active, opt.swatch);
+      b.addEventListener("click", () => onChip(group, opt, b));
+      wrap.appendChild(b);
     }
-    box.innerHTML =
-      `<div class="compare-slots">${slots.join("")}</div>` +
-      `<p class="compare-hint">Up to three at a time &mdash; three hues is the most a dot map can keep apart for colour-blind readers. Everything else stays grey.</p>`;
-    box.querySelectorAll("[data-remove]").forEach((b) =>
-      b.addEventListener("click", () => {
-        state.compare.splice(Number(b.dataset.remove), 1);
-        recomputeColours();
-        renderLegend();
-        renderTaxonList();
-        treeLayer.draw();
-      })
-    );
-    return;
+    bar.appendChild(wrap);
   }
 
-  // origin + genus: a plain labelled swatch list, with counts.
-  const counts = mode === "origin"
-    ? [meta.summary.unknown_count, meta.summary.native_count, meta.summary.non_native_count - meta.summary.invasive_count, meta.summary.invasive_count]
-    : null;
-  const rows = palette.labels.map((label, i) => {
-    if (!label) return "";
-    const count = counts ? counts[i] : (meta.genera.find((g) => g.label === label) || {}).count;
-    return `<div class="legend-row"><span class="swatch" style="background:${palette.css[i]}"></span><span>${label}</span>` +
-      (count != null ? `<span class="legend-count">${fmtCompact.format(count)}</span>` : "") + `</div>`;
+  renderTaxonPicker(bar);
+  renderDbhFilter(bar);
+  renderWardFilter(bar);
+
+  const layers = document.createElement("div");
+  layers.className = "filter-group";
+  const ll = document.createElement("span");
+  ll.className = "filter-group-label";
+  ll.textContent = "Layers";
+  const wardChip = chip("Ward boundaries", false);
+  wardChip.addEventListener("click", () => {
+    const on = wardChip.dataset.active === "true";
+    wardChip.dataset.active = String(!on);
+    if (!on) loadWardLayer();
+    else if (wardLayer) map.removeLayer(wardLayer);
   });
-  // Put the muted/unknown slot last -- it reads as a footnote, not a category.
-  box.innerHTML = rows.slice(1).join("") + rows[0];
+  layers.append(ll, wardChip);
+  bar.appendChild(layers);
 }
 
-/* The species/genus list doubles as the filter and, in compare mode, the colour picker. */
+function onChip(group, opt, button) {
+  if (group.single) {
+    state[group.key] = opt.value;
+    button.parentElement.querySelectorAll(".filter-chip").forEach((b, i) => {
+      b.dataset.active = String(group.options[i].value === opt.value);
+    });
+    if (group.key === "colourMode") {
+      setColourMode(opt.value);
+      return;
+    }
+    if (group.key === "taxonLevel") {
+      // Selections are keyed per level, so switching clears them rather than
+      // silently filtering by something no longer on screen.
+      state.selectedTaxa.clear();
+      renderTaxonList();
+      applyFilters();
+      return;
+    }
+  } else {
+    const on = button.dataset.active === "true";
+    button.dataset.active = String(!on);
+    if (on) state[group.key].delete(opt.value);
+    else state[group.key].add(opt.value);
+    applyFilters();
+  }
+}
+
+/* ---- species / genus picker ---- */
+
+function renderTaxonPicker(container) {
+  const block = document.createElement("div");
+  block.className = "ward-filter";
+  block.innerHTML =
+    '<div class="ward-filter-head">' +
+      '<span class="filter-group-label">Pick species or genus</span>' +
+      '<span class="ward-actions"><button type="button" class="link-btn" id="taxon-clear">Clear</button></span>' +
+    '</div>' +
+    '<input type="search" class="taxon-search" id="taxon-search" autocomplete="off" ' +
+      'placeholder="Search maple, oak, Quercus&hellip;" aria-label="Search species or genus">' +
+    '<div class="taxon-list" id="taxon-list" role="group" aria-label="Species and genus"></div>';
+  container.appendChild(block);
+
+  let timer = null;
+  el("taxon-search").addEventListener("input", () => {
+    clearTimeout(timer);
+    timer = setTimeout(renderTaxonList, 120);
+  });
+  el("taxon-clear").addEventListener("click", () => {
+    state.selectedTaxa.clear();
+    state.compare = [];
+    if (state.colourMode === "compare") {
+      recomputeColours();
+      renderLegend();
+    }
+    renderTaxonList();
+    applyFilters();
+  });
+  renderTaxonList();
+}
+
+/* The list doubles as the filter and, in compare mode, the colour picker -- so the rows
+ * carry a checkbox in filter mode and a swatch in compare mode. */
 function renderTaxonList() {
-  const query = el("taxon-search").value.trim().toLowerCase();
+  const query = (el("taxon-search").value || "").trim().toLowerCase();
   const level = state.taxonLevel;
   const source = level === "genus" ? meta.genera : meta.species;
   const list = el("taxon-list");
+  const comparing = state.colourMode === "compare";
 
   const rows = source
     .filter((r) => {
       const key = level === "genus" ? r.genus : r.key;
-      if (!key) return false; // trees with no identification at all have nothing to filter on
+      if (!key) return false; // trees with no identification have nothing to filter on
       if (!query) return true;
       return (r.label || "").toLowerCase().includes(query) || key.toLowerCase().includes(query);
     })
     .slice(0, 400);
 
+  list.textContent = "";
   if (!rows.length) {
-    list.innerHTML = `<div class="taxon-empty">Nothing matches &ldquo;${query}&rdquo;.</div>`;
+    const empty = document.createElement("div");
+    empty.className = "taxon-empty";
+    empty.textContent = `Nothing matches “${query}”.`;
+    list.appendChild(empty);
     return;
   }
 
-  list.innerHTML = rows
-    .map((r) => {
-      const key = level === "genus" ? r.genus : r.key;
-      const selected = state.colourMode === "compare"
-        ? state.compare.some((c) => c.key === key && c.level === level)
-        : state.selectedTaxa.has(key);
-      const sci = level === "genus" ? r.genus : r.key;
-      const badge = r.invasive ? " · invasive" : r.native === "native" ? " · native" : "";
-      return (
-        `<button class="taxon-row" role="option" aria-selected="${selected}" data-key="${encodeURIComponent(key)}">` +
-          `<span class="tr-name">${r.label || sci} <span class="tr-sci">${sci}</span>${badge}</span>` +
-          `<span class="tr-count">${fmtCompact.format(r.count)}</span>` +
-        `</button>`
-      );
-    })
-    .join("");
+  for (const r of rows) {
+    const key = level === "genus" ? r.genus : r.key;
+    const slot = comparing ? state.compare.findIndex((c) => c.key === key && c.level === level) : -1;
+    const selected = comparing ? slot >= 0 : state.selectedTaxa.has(key);
 
-  list.querySelectorAll(".taxon-row").forEach((btn) => {
-    btn.addEventListener("click", () => onTaxonClick(decodeURIComponent(btn.dataset.key)));
-  });
-  el("taxon-clear").hidden = !(state.selectedTaxa.size || (state.colourMode === "compare" && state.compare.length));
+    const row = document.createElement("button");
+    row.type = "button";
+    row.className = "taxon-row";
+    row.setAttribute("aria-selected", String(selected));
+
+    if (comparing) {
+      const sw = document.createElement("span");
+      sw.className = "swatch";
+      sw.style.background = slot >= 0 ? palette.css[slot + 1] : "transparent";
+      sw.style.boxShadow = "0 0 0 1px var(--border)";
+      row.appendChild(sw);
+    } else {
+      const box = document.createElement("input");
+      box.type = "checkbox";
+      box.checked = selected;
+      box.tabIndex = -1;
+      row.appendChild(box);
+    }
+
+    const name = document.createElement("span");
+    name.className = "taxon-name";
+    name.textContent = r.label || key;
+    const sci = document.createElement("span");
+    sci.className = "taxon-sci";
+    sci.textContent = " " + key;
+    name.appendChild(sci);
+    if (r.invasive) name.appendChild(document.createTextNode(" · invasive"));
+    else if (r.native === "native") name.appendChild(document.createTextNode(" · native"));
+
+    const count = document.createElement("span");
+    count.className = "taxon-count";
+    count.textContent = fmtCompact.format(r.count);
+
+    row.append(name, count);
+    row.addEventListener("click", () => onTaxonClick(key, r));
+    list.appendChild(row);
+  }
 }
 
-function onTaxonClick(key) {
+function onTaxonClick(key, row) {
   const level = state.taxonLevel;
-  const source = level === "genus" ? meta.genera : meta.species;
-  const row = source.find((r) => (level === "genus" ? r.genus : r.key) === key);
-
   if (state.colourMode === "compare") {
     const at = state.compare.findIndex((c) => c.key === key && c.level === level);
     if (at >= 0) state.compare.splice(at, 1);
@@ -822,11 +934,308 @@ function onTaxonClick(key) {
     treeLayer.draw();
     return;
   }
-
   if (state.selectedTaxa.has(key)) state.selectedTaxa.delete(key);
   else state.selectedTaxa.add(key);
   applyFilters();
   renderTaxonList();
+}
+
+/* ---- trunk diameter ---- */
+
+function renderDbhFilter(container) {
+  const bins = meta.dbh_histogram.bins;
+  const top = bins.length ? bins[bins.length - 1][0] + meta.dbh_histogram.bin_width : 200;
+
+  const block = document.createElement("div");
+  block.className = "date-filter";
+  block.innerHTML =
+    '<div class="filter-group-label">Trunk diameter</div>' +
+    '<div class="histogram" id="histogram"></div>' +
+    '<div class="range-slider"><div class="range-track"></div>' +
+      '<div class="range-fill" id="range-fill"></div>' +
+      `<input type="range" id="range-min" class="range-input" min="0" max="${top}" step="1" value="0" aria-label="Minimum trunk diameter">` +
+      `<input type="range" id="range-max" class="range-input" min="0" max="${top}" step="1" value="${top}" aria-label="Maximum trunk diameter">` +
+    '</div>' +
+    '<div class="range-labels"><span id="range-label-min"></span><span id="range-label-max"></span></div>' +
+    '<label class="check-row"><input type="checkbox" id="dbh-include-unknown" checked>' +
+      `<span>Include the ${fmt.format(meta.summary.missing_dbh_count)} trees with no diameter recorded</span></label>`;
+  container.appendChild(block);
+
+  const minEl = el("range-min");
+  const maxEl = el("range-max");
+  state.dbhMin = 0;
+  state.dbhMax = 300; // the stored cap, so "max" really does include the biggest trees
+
+  const onRange = () => {
+    let lo = Number(minEl.value);
+    let hi = Number(maxEl.value);
+    if (lo > hi) [lo, hi] = [hi, lo];
+    minEl.value = lo;
+    maxEl.value = hi;
+    state.dbhMin = lo;
+    state.dbhMax = hi >= top ? 300 : hi;
+    renderDbhControls();
+    applyFilters();
+  };
+  minEl.addEventListener("input", onRange);
+  maxEl.addEventListener("input", onRange);
+  el("dbh-include-unknown").addEventListener("change", (e) => {
+    state.dbhIncludeUnknown = e.target.checked;
+    applyFilters();
+  });
+
+  // The histogram is static; only the in/out-of-range shading changes.
+  const max = Math.max(...bins.map((b) => b[1]));
+  el("histogram").innerHTML = bins
+    .map(([lo, count]) =>
+      `<div class="histogram-bar" data-lo="${lo}" style="height:${Math.max(2, (count / max) * 100)}%" ` +
+      `title="${lo}–${lo + meta.dbh_histogram.bin_width} cm: ${fmt.format(count)} trees"></div>`)
+    .join("");
+  renderDbhControls();
+}
+
+function renderDbhControls() {
+  const maxEl = el("range-max");
+  const top = Number(maxEl.max);
+  const atTop = state.dbhMax >= top;
+  el("range-label-min").textContent = `${state.dbhMin} cm`;
+  el("range-label-max").textContent = atTop ? `${top}+ cm` : `${state.dbhMax} cm`;
+  const fill = el("range-fill");
+  fill.style.left = `${(state.dbhMin / top) * 100}%`;
+  fill.style.right = `${100 - (Math.min(state.dbhMax, top) / top) * 100}%`;
+
+  const width = meta.dbh_histogram.bin_width;
+  el("histogram").querySelectorAll(".histogram-bar").forEach((bar) => {
+    const lo = Number(bar.dataset.lo);
+    const inRange = lo + width > state.dbhMin && lo <= state.dbhMax;
+    bar.classList.toggle("out-of-range", !inRange);
+  });
+}
+
+/* ---- wards ---- */
+
+function renderWardFilter(container) {
+  const block = document.createElement("div");
+  block.className = "ward-filter";
+  const head = document.createElement("div");
+  head.className = "ward-filter-head";
+  head.innerHTML = '<span class="filter-group-label">Wards</span><span class="ward-actions"></span>';
+  const list = document.createElement("div");
+  list.className = "ward-list";
+  list.setAttribute("role", "group");
+  list.setAttribute("aria-label", "Wards");
+
+  const wards = meta.wards.slice().sort((a, b) => b.tree_count - a.tree_count);
+  for (const w of wards) {
+    const code = parseInt(w.ward, 10);
+    const row = document.createElement("label");
+    row.className = "ward-row";
+    const box = document.createElement("input");
+    box.type = "checkbox";
+    box.checked = state.wards.has(code);
+    const name = document.createElement("span");
+    name.className = "ward-name";
+    name.textContent = w.ward_name;
+    const count = document.createElement("span");
+    count.className = "ward-count";
+    count.textContent = fmt.format(w.tree_count);
+    box.addEventListener("change", () => {
+      if (box.checked) state.wards.add(code);
+      else state.wards.delete(code);
+      applyFilters();
+    });
+    row.append(box, name, count);
+    list.appendChild(row);
+  }
+
+  const actions = head.querySelector(".ward-actions");
+  for (const [text, on] of [["All", true], ["None", false]]) {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "link-btn";
+    btn.textContent = text;
+    btn.addEventListener("click", () => {
+      state.wards.clear();
+      if (on) wards.forEach((w) => state.wards.add(parseInt(w.ward, 10)));
+      list.querySelectorAll("input").forEach((b) => { b.checked = on; });
+      applyFilters();
+    });
+    actions.appendChild(btn);
+  }
+
+  block.append(head, list);
+  container.appendChild(block);
+}
+
+/* ------------------------------------------------------------------ UI: popups --------- */
+
+function streetName(id) {
+  return id && meta.streets[id] ? meta.streets[id] : null;
+}
+
+/* Built the same way as the permit map's popup: a title, then label/value rows, then an
+ * italic note. Same classes, so both maps get their popup styling from one stylesheet. */
+function popupContent(i) {
+  const t = meta.taxa[trees.taxon[i]];
+  const dbh = trees.dbh[i];
+  const wrap = document.createElement("div");
+
+  const title = document.createElement("div");
+  title.className = "popup-title";
+  title.textContent = t.common || t.botanical;
+  wrap.appendChild(title);
+
+  const sci = document.createElement("div");
+  sci.className = "popup-description";
+  sci.style.marginTop = "0";
+  sci.style.paddingTop = "0";
+  sci.style.borderTop = "0";
+  sci.textContent = t.botanical;
+  wrap.appendChild(sci);
+
+  const originLabel = t.invasive ? "Introduced & invasive"
+    : t.native === "native" ? "Native to Ontario"
+    : t.native === "non_native" ? "Introduced"
+    : "Not identified to species";
+  const originVar = t.invasive ? "--series-invasive"
+    : t.native === "native" ? "--series-native"
+    : t.native === "non_native" ? "--series-introduced"
+    : "--series-unknown";
+
+  const badge = document.createElement("div");
+  badge.className = "popup-badge";
+  const sw = document.createElement("span");
+  sw.className = "swatch";
+  sw.style.background = cssVar(originVar);
+  badge.append(sw, document.createTextNode(originLabel));
+  wrap.appendChild(badge);
+
+  // A trunk-size figure reads faster than the number alone: this trunk against the
+  // thickest recorded for the same species.
+  if (dbh && t.max_dbh) {
+    const fig = document.createElement("div");
+    fig.className = "popup-figure";
+    fig.innerHTML =
+      '<div class="popup-figure-bar"><div class="popup-figure-fill" style="width:' +
+      Math.min(100, (dbh / t.max_dbh) * 100).toFixed(1) + '%"></div></div>' +
+      '<div class="popup-figure-label">' + dbh + ' cm &middot; thickest in the inventory is ' +
+      t.max_dbh + ' cm</div>';
+    wrap.appendChild(fig);
+  }
+
+  const addr = trees.details
+    ? [trees.addr[i] || null, streetName(trees.street[i])].filter(Boolean).join(" ")
+    : "";
+  const crosses = trees.details
+    ? [streetName(trees.cross1[i]), streetName(trees.cross2[i])].filter(Boolean)
+    : [];
+  const ward = meta.wards.find((w) => parseInt(w.ward, 10) === trees.ward[i]);
+
+  const rows = [
+    ["Address", addr || (trees.details ? "Not recorded" : "Loading…")],
+    ["Between", crosses.length ? crosses.join(" and ") : null],
+    ["Ward", ward ? `${ward.ward_name} (${ward.ward})` : null],
+    ["Trunk diameter", dbh ? `${dbh} cm` : "Not recorded"],
+    ["Origin", t.origin || null],
+    ["Typical for species", t.mean_dbh ? `${t.mean_dbh} cm mean trunk` : null],
+    ["Trees of this kind", `${fmt.format(t.count)} citywide`],
+    ["Record", t.basis === "genus" ? "Identified to genus only" : null],
+  ];
+
+  for (const [k, v] of rows) {
+    if (v === null || v === undefined || v === "") continue;
+    const row = document.createElement("div");
+    row.className = "popup-row";
+    const kEl = document.createElement("span");
+    kEl.className = "k";
+    kEl.textContent = k;
+    const vEl = document.createElement("span");
+    vEl.className = "v";
+    vEl.textContent = v;
+    row.append(kEl, vEl);
+    wrap.appendChild(row);
+  }
+
+  if (t.notes) {
+    const note = document.createElement("div");
+    note.className = "popup-description";
+    note.textContent = t.notes + ".";
+    wrap.appendChild(note);
+  }
+  return wrap;
+}
+
+/* ------------------------------------------------------------------ UI: panel ---------- */
+
+function renderStats() {
+  const s = meta.summary;
+  const tiles = [
+    ["Trees shown", fmtCompact.format(visibleCount)],
+    ["Native to Ontario", `${s.native_pct}%`],
+    ["Species", num(s.species_count)],
+    ["Invasive", fmtCompact.format(s.invasive_count)],
+  ];
+  el("stats").innerHTML = tiles
+    .map(([label, value]) =>
+      `<div class="stat-tile"><div class="stat-value">${value}</div><div class="stat-label">${label}</div></div>`)
+    .join("");
+}
+
+function renderLegend() {
+  const box = el("map-legend");
+  const mode = state.colourMode;
+
+  if (mode === "dbh") {
+    const steps = palette.css.slice(1);
+    box.innerHTML =
+      '<h2>Trunk diameter</h2>' +
+      `<div class="ramp-bar">${steps.map((c) => `<span style="background:${c}"></span>`).join("")}</div>` +
+      '<div class="ramp-labels"><span>thin</span><span>thick</span></div>' +
+      `<div class="legend-row"><span class="swatch" style="background:${palette.css[0]}"></span>` +
+      '<span>No diameter recorded</span></div>';
+    return;
+  }
+
+  if (mode === "compare") {
+    let html = '<h2>Comparing</h2>';
+    for (let i = 0; i < COMPARE_LIMIT; i++) {
+      const entry = state.compare[i];
+      html += `<div class="compare-slot" data-filled="${!!entry}">` +
+        `<span class="swatch" style="background:${palette.css[i + 1]}"></span>` +
+        `<span class="compare-name">${entry ? entry.label : "Pick one from the list above"}</span>` +
+        (entry ? `<span class="compare-count">${fmtCompact.format(entry.count)}</span>` +
+                 `<button type="button" class="compare-remove" data-remove="${i}" aria-label="Remove ${entry.label}">&times;</button>` : "") +
+        '</div>';
+    }
+    html += '<p class="legend-note">Up to three at a time &mdash; three hues is the most a dot ' +
+            'map can keep apart for colour-blind readers. Everything else stays grey.</p>';
+    box.innerHTML = html;
+    box.querySelectorAll("[data-remove]").forEach((b) =>
+      b.addEventListener("click", () => {
+        state.compare.splice(Number(b.dataset.remove), 1);
+        recomputeColours();
+        renderLegend();
+        renderTaxonList();
+        treeLayer.draw();
+      }));
+    return;
+  }
+
+  const counts = mode === "origin"
+    ? [meta.summary.unknown_count, meta.summary.native_count,
+       meta.summary.non_native_count - meta.summary.invasive_count, meta.summary.invasive_count]
+    : null;
+  const rows = palette.labels.map((label, i) => {
+    if (!label) return "";
+    const count = counts ? counts[i] : (meta.genera.find((g) => g.label === label) || {}).count;
+    return `<div class="legend-row"><span class="swatch" style="background:${palette.css[i]}"></span>` +
+      `<span>${label}</span>` +
+      (count != null ? `<span style="margin-left:auto;font-variant-numeric:tabular-nums;color:var(--text-muted);font-size:11px">${fmtCompact.format(count)}</span>` : "") +
+      '</div>';
+  });
+  // The muted/unknown slot reads as a footnote, so it goes last.
+  box.innerHTML = '<h2>Tree points</h2>' + rows.slice(1).join("") + rows[0] +
+    '<div class="legend-row"><span style="color: var(--text-muted)">Point size &asymp; trunk diameter</span></div>';
 }
 
 function renderTaxaTable() {
@@ -850,138 +1259,27 @@ function renderTaxaTable() {
     .sort((a, b) => b.count - a.count)
     .slice(0, 12);
 
-  el("table-scope").textContent = state.ward
-    ? `in ${(meta.wards.find((w) => w.ward === state.ward) || {}).ward_name || "this ward"}`
+  const selectedWards = state.wards.size && state.wards.size < meta.wards.length
+    ? meta.wards.filter((w) => state.wards.has(parseInt(w.ward, 10)))
+    : null;
+  el("table-scope").textContent = selectedWards
+    ? (selectedWards.length === 1 ? `in ${selectedWards[0].ward_name}` : `in ${selectedWards.length} wards`)
     : "citywide";
 
   el("taxa-table").innerHTML = ranked
     .map(({ count, row }) => {
-      const colour = row.invasive ? cssVar(SLOT_VARS.invasive)
-        : row.native === "native" ? cssVar(SLOT_VARS.native)
-        : row.native === "non_native" ? cssVar(SLOT_VARS.introduced)
-        : cssVar(SLOT_VARS.unknown);
+      const colour = row.invasive ? cssVar("--series-invasive")
+        : row.native === "native" ? cssVar("--series-native")
+        : row.native === "non_native" ? cssVar("--series-introduced")
+        : cssVar("--series-unknown");
       const share = total ? ((count / total) * 100).toFixed(1) + "%" : "–";
-      return `<div class="taxa-row"><span class="swatch" style="background:${colour}"></span>` +
-        `<span class="tx-name">${row.label || row.genus || row.key}</span>` +
-        `<span class="tx-count">${fmt.format(count)}</span><span class="tx-share">${share}</span></div>`;
+      return '<div class="taxa-row">' +
+        `<span class="swatch" style="background:${colour}"></span>` +
+        `<span class="taxa-name">${row.label || row.genus || row.key}</span>` +
+        `<span class="taxa-count">${fmt.format(count)}</span>` +
+        `<span class="taxa-share">${share}</span></div>`;
     })
     .join("");
-}
-
-function renderWardStats() {
-  const box = el("ward-stats");
-  if (!state.ward) {
-    box.innerHTML = "";
-    return;
-  }
-  const w = meta.wards.find((x) => x.ward === state.ward);
-  if (!w) {
-    box.innerHTML = "";
-    return;
-  }
-  box.innerHTML = [
-    ["Trees", fmtCompact.format(w.tree_count)],
-    ["Native", `${w.native_pct}%`],
-    ["Species", num(w.species_count)],
-    ["Mean trunk", `${w.mean_dbh_cm} cm`],
-  ]
-    .map(([label, value]) => `<div class="stat-tile"><div class="stat-value">${value}</div><div class="stat-label">${label}</div></div>`)
-    .join("");
-}
-
-/* ------------------------------------------------------------------ UI: tree card ------ */
-
-function streetName(id) {
-  return id && meta.streets[id] ? meta.streets[id] : null;
-}
-
-function renderTreeCard(i) {
-  const card = el("tree-card");
-  if (i < 0) {
-    card.hidden = true;
-    return;
-  }
-  const t = meta.taxa[trees.taxon[i]];
-  const dbh = trees.dbh[i];
-  const body = el("tree-card-body");
-
-  const originLabel = t.invasive ? "Introduced &amp; invasive"
-    : t.native === "native" ? "Native to Ontario"
-    : t.native === "non_native" ? "Introduced"
-    : "Not identified to species";
-  const originColour = t.invasive ? SLOT_VARS.invasive
-    : t.native === "native" ? SLOT_VARS.native
-    : t.native === "non_native" ? SLOT_VARS.introduced
-    : SLOT_VARS.unknown;
-
-  const addr = trees.details
-    ? [trees.addr[i] || null, streetName(trees.street[i])].filter(Boolean).join(" ")
-    : "";
-  const crosses = trees.details
-    ? [streetName(trees.cross1[i]), streetName(trees.cross2[i])].filter(Boolean)
-    : [];
-  const ward = meta.wards.find((w) => w.ward === String(trees.ward[i]).padStart(2, "0"));
-
-  const rows = [
-    ["Address", addr || (trees.details ? "Not recorded" : "Loading…")],
-    ["Between", crosses.length ? crosses.join(" and ") : null],
-    ["Ward", ward ? `${ward.ward_name} (${ward.ward})` : null],
-    ["Trunk diameter", dbh ? `${dbh} cm` : "Not recorded"],
-    ["Origin", t.origin || null],
-    ["Typical for species", t.mean_dbh ? `${t.mean_dbh} cm mean trunk` : null],
-    ["Trees of this kind", `${fmt.format(t.count)} citywide`],
-  ];
-
-  // A trunk-size figure reads faster than the number alone: this trunk against the
-  // thickest recorded for the same species.
-  const figure = dbh && t.max_dbh
-    ? `<div class="dbh-figure"><div class="dbh-figure-bar">` +
-      `<div class="dbh-figure-fill" style="width:${Math.min(100, (dbh / t.max_dbh) * 100).toFixed(1)}%"></div></div>` +
-      `<div class="dbh-figure-label">${dbh} cm &middot; thickest ${(t.common || t.botanical || "tree").toLowerCase()} in the inventory is ${t.max_dbh} cm</div></div>`
-    : "";
-
-  body.innerHTML =
-    `<div class="tree-title">${t.common || t.botanical}</div>` +
-    `<div class="tree-sci">${t.botanical}${t.cultivar ? "" : ""}</div>` +
-    `<div class="tree-badges">` +
-      `<span class="tree-badge"><span class="swatch" style="background:${cssVar(originColour)}"></span>${originLabel}</span>` +
-      (t.basis === "genus" ? `<span class="tree-badge">Genus-level record</span>` : "") +
-    `</div>` +
-    figure +
-    rows
-      .filter(([, v]) => v)
-      .map(([k, v]) => `<div class="tree-row"><span class="k">${k}</span><span class="v">${v}</span></div>`)
-      .join("") +
-    (t.notes ? `<p class="tree-note">${t.notes}.</p>` : "");
-
-  card.hidden = false;
-  card.scrollIntoView({ block: "nearest", behavior: "smooth" });
-}
-
-/* ------------------------------------------------------------------ UI: dbh slider ---- */
-
-function renderHistogram() {
-  const bins = meta.dbh_histogram.bins;
-  const max = Math.max(...bins.map((b) => b[1]));
-  el("histogram").innerHTML = bins
-    .map(([lo, count]) => {
-      const inRange = lo + meta.dbh_histogram.bin_width > state.dbhMin && lo <= state.dbhMax;
-      return `<div class="hbar" data-in-range="${inRange}" style="height:${Math.max(1, (count / max) * 100)}%" title="${lo}–${lo + 5} cm: ${fmt.format(count)}"></div>`;
-    })
-    .join("");
-}
-
-function renderDbhControls() {
-  const minEl = el("range-min");
-  const maxEl = el("range-max");
-  el("range-label-min").textContent = `${state.dbhMin} cm`;
-  el("range-label-max").textContent = state.dbhMax >= Number(maxEl.max) ? `${maxEl.max}+ cm` : `${state.dbhMax} cm`;
-  const span = Number(maxEl.max) - Number(maxEl.min);
-  const fill = el("range-fill");
-  fill.style.left = `${((state.dbhMin - Number(maxEl.min)) / span) * 100}%`;
-  fill.style.right = `${100 - ((state.dbhMax - Number(maxEl.min)) / span) * 100}%`;
-  el("dbh-readout").textContent = `${state.dbhMin}–${state.dbhMax >= Number(maxEl.max) ? maxEl.max + "+" : state.dbhMax} cm`;
-  renderHistogram();
 }
 
 /* ------------------------------------------------------------------ orchestration ------ */
@@ -989,47 +1287,46 @@ function renderDbhControls() {
 function applyFilters() {
   clearVisible();
   visibleCount = recomputeVisible();
-  if (state.selectedTree >= 0 && !visible[state.selectedTree]) {
-    state.selectedTree = -1;
-    renderTreeCard(-1);
-  }
+  // A popup pinned to a tree that no longer passes the filters would be lying.
+  if (state.selectedTree >= 0 && !visible[state.selectedTree]) closePopup();
   renderStats();
   renderTaxaTable();
-  el("taxon-clear").hidden = !(state.selectedTaxa.size || (state.colourMode === "compare" && state.compare.length));
   if (treeLayer) treeLayer.draw();
+  writeHash();
 }
 
 function setColourMode(mode) {
   state.colourMode = mode;
-  document.querySelectorAll("#colour-mode .seg-btn").forEach((b) =>
-    b.setAttribute("aria-checked", String(b.dataset.mode === mode))
-  );
-  if (mode === "compare" && !state.compare.length) {
-    // Open on the three most common genera, so the mode is never an empty grey map.
-    state.taxonLevel = "genus";
-    document.querySelectorAll("#taxon-level .seg-btn").forEach((b) =>
-      b.setAttribute("aria-checked", String(b.dataset.level === "genus"))
-    );
-    state.compare = meta.genera.slice(0, COMPARE_LIMIT).map((g) => ({
-      key: g.genus, level: "genus", label: g.label, count: g.count,
-    }));
-  }
   rebuildPalette();
   recomputeColours();
   renderLegend();
+  if (mode === "compare" && !state.compare.length) {
+    // Open on the three most common genera, so the mode is never an empty grey map.
+    state.compare = meta.genera.slice(0, COMPARE_LIMIT).map((g) => ({
+      key: g.genus, level: "genus", label: g.label, count: g.count,
+    }));
+    if (state.taxonLevel !== "genus") {
+      state.taxonLevel = "genus";
+      renderFilterBar();
+    }
+    recomputeColours();
+    renderLegend();
+  }
   renderTaxonList();
   if (treeLayer) treeLayer.draw();
+  writeHash();
 }
 
 /* ------------------------------------------------------------------ permalink ----------- */
 
-/* #z/lat/lon, optionally &t=lat,lon for a selected tree. The selected tree is addressed by
- * position rather than by row number: row numbers shift every time the City republishes the
- * inventory, coordinates don't. */
+/* #z/lat/lon, optionally &t=lat,lon for a selected tree and &c=<mode> for the colouring.
+ * The selected tree is addressed by position rather than row number: row numbers shift
+ * every time the City republishes the inventory, coordinates don't. */
 function writeHash() {
   if (!map) return;
   const c = map.getCenter();
   let hash = `#${map.getZoom()}/${c.lat.toFixed(5)}/${c.lng.toFixed(5)}`;
+  if (state.colourMode !== "origin") hash += `&c=${state.colourMode}`;
   if (state.selectedTree >= 0) {
     const i = state.selectedTree;
     hash += `&t=${trees.lat[i].toFixed(6)},${trees.lon[i].toFixed(6)}`;
@@ -1052,6 +1349,8 @@ function readHash() {
     const [lat, lon] = treeParam.slice(2).split(",").map(Number);
     if (!Number.isNaN(lat) && !Number.isNaN(lon)) out.tree = [lat, lon];
   }
+  const mode = rest.find((p) => p.startsWith("c="));
+  if (mode) out.mode = mode.slice(2);
   return out;
 }
 
@@ -1063,20 +1362,27 @@ function findTreeNear(lat, lon) {
     const dx = trees.lon[i] - lon;
     const dy = trees.lat[i] - lat;
     const d = dx * dx + dy * dy;
-    if (d < bestDist) {
-      bestDist = d;
-      best = i;
-    }
+    if (d < bestDist) { bestDist = d; best = i; }
   }
-  // ~20 m tolerance in degrees squared.
-  return bestDist < 4e-8 ? best : -1;
+  return bestDist < 4e-8 ? best : -1; // ~20 m tolerance, in degrees squared
 }
 
 /* ------------------------------------------------------------------ interaction --------- */
 
+function closePopup() {
+  state.selectedTree = -1;
+  if (openPopup) { map.closePopup(openPopup); openPopup = null; }
+  if (treeLayer) treeLayer.draw();
+}
+
 function selectTree(i) {
   state.selectedTree = i;
-  renderTreeCard(i);
+  const tip = document.querySelector(".tree-tip");
+  if (tip) tip.hidden = true;
+  openPopup = L.popup({ autoPan: true, maxWidth: 280, closeButton: true })
+    .setLatLng([trees.lat[i], trees.lon[i]])
+    .setContent(popupContent(i))
+    .openOn(map);
   treeLayer.draw();
   writeHash();
 }
@@ -1092,6 +1398,16 @@ function setupMapInteraction() {
   map.on("click", (e) => {
     const i = treeLayer.hitTest(map.latLngToLayerPoint(e.latlng), tolerance());
     if (i >= 0) selectTree(i);
+    else closePopup();
+  });
+
+  map.on("popupclose", (e) => {
+    if (e.popup === openPopup) {
+      openPopup = null;
+      state.selectedTree = -1;
+      treeLayer.draw();
+      writeHash();
+    }
   });
 
   let rafPending = false;
@@ -1100,17 +1416,18 @@ function setupMapInteraction() {
     rafPending = true;
     requestAnimationFrame(() => {
       rafPending = false;
-      const i = treeLayer.hitTest(map.latLngToLayerPoint(e.latlng), tolerance());
+      // An open popup already names the tree, so the hover readout would just be a
+      // second copy of its heading sitting on top of it.
+      const i = openPopup ? -1 : treeLayer.hitTest(map.latLngToLayerPoint(e.latlng), tolerance());
       if (i < 0) {
         tip.hidden = true;
-        L.DomUtil.removeClass(map.getContainer(), "leaflet-clickable");
-        map.getContainer().style.cursor = "";
+        map.getContainer().style.cursor = openPopup ? "pointer" : "";
         return;
       }
       const t = meta.taxa[trees.taxon[i]];
       const dbh = trees.dbh[i];
-      tip.innerHTML = `<strong>${t.common || t.botanical}</strong><br><span class="tt-sci">${t.botanical}</span>` +
-        (dbh ? `<br>${dbh} cm trunk` : "");
+      tip.innerHTML = `<strong>${t.common || t.botanical}</strong><br>` +
+        `<span class="tree-tip-sci">${t.botanical}</span>` + (dbh ? `<br>${dbh} cm trunk` : "");
       tip.hidden = false;
       const p = e.containerPoint;
       const pane = el("map-pane").getBoundingClientRect();
@@ -1120,129 +1437,11 @@ function setupMapInteraction() {
     });
   });
 
-  map.on("mouseout", () => {
-    tip.hidden = true;
-  });
+  map.on("mouseout", () => { tip.hidden = true; });
   map.on("moveend zoomend", writeHash);
 }
 
-function setupControls() {
-  // Colour mode
-  document.querySelectorAll("#colour-mode .seg-btn").forEach((b) =>
-    b.addEventListener("click", () => setColourMode(b.dataset.mode))
-  );
-
-  // Origin chips
-  document.querySelectorAll('[data-group="origin"]').forEach((chip) =>
-    chip.addEventListener("click", () => {
-      const on = chip.dataset.active === "true";
-      chip.dataset.active = String(!on);
-      if (on) state.origin.delete(chip.dataset.value);
-      else state.origin.add(chip.dataset.value);
-      applyFilters();
-    })
-  );
-
-  // Genus / species level
-  document.querySelectorAll("#taxon-level .seg-btn").forEach((b) =>
-    b.addEventListener("click", () => {
-      state.taxonLevel = b.dataset.level;
-      document.querySelectorAll("#taxon-level .seg-btn").forEach((x) =>
-        x.setAttribute("aria-checked", String(x.dataset.level === state.taxonLevel))
-      );
-      // Selections are keyed per level, so switching level clears them rather than
-      // silently filtering by something no longer on screen.
-      state.selectedTaxa.clear();
-      renderTaxonList();
-      applyFilters();
-      renderTaxaTable();
-    })
-  );
-
-  let searchTimer = null;
-  el("taxon-search").addEventListener("input", () => {
-    clearTimeout(searchTimer);
-    searchTimer = setTimeout(renderTaxonList, 120);
-  });
-
-  el("taxon-clear").addEventListener("click", () => {
-    state.selectedTaxa.clear();
-    state.compare = [];
-    if (state.colourMode === "compare") {
-      recomputeColours();
-      renderLegend();
-    }
-    renderTaxonList();
-    applyFilters();
-  });
-
-  // Trunk diameter range
-  const minEl = el("range-min");
-  const maxEl = el("range-max");
-  const bins = meta.dbh_histogram.bins;
-  const top = bins.length ? bins[bins.length - 1][0] + meta.dbh_histogram.bin_width : 200;
-  [minEl, maxEl].forEach((input) => {
-    input.min = 0;
-    input.max = top;
-    input.step = 1;
-  });
-  minEl.value = 0;
-  maxEl.value = top;
-  state.dbhMin = 0;
-  state.dbhMax = 300; // the stored cap, so "max" really does include the biggest trees
-
-  const onRange = () => {
-    let lo = Number(minEl.value);
-    let hi = Number(maxEl.value);
-    if (lo > hi) [lo, hi] = [hi, lo];
-    minEl.value = lo;
-    maxEl.value = hi;
-    state.dbhMin = lo;
-    state.dbhMax = hi >= top ? 300 : hi;
-    renderDbhControls();
-    applyFilters();
-  };
-  minEl.addEventListener("input", onRange);
-  maxEl.addEventListener("input", onRange);
-
-  el("dbh-include-unknown").addEventListener("change", (e) => {
-    state.dbhIncludeUnknown = e.target.checked;
-    applyFilters();
-  });
-  el("dbh-unknown-count").textContent = fmt.format(meta.summary.missing_dbh_count);
-
-  // Ward
-  const wardSelect = el("ward-select");
-  meta.wards.forEach((w) => {
-    const opt = document.createElement("option");
-    opt.value = w.ward;
-    opt.textContent = `${w.ward_name} (${w.ward})`;
-    wardSelect.appendChild(opt);
-  });
-  wardSelect.addEventListener("change", () => {
-    state.ward = wardSelect.value;
-    el("ward-clear").hidden = !state.ward;
-    renderWardStats();
-    applyFilters();
-    if (state.ward && wardLayer) {
-      const target = wardLayer.getLayers().find((l) => l.feature.properties.ward === state.ward);
-      if (target) map.fitBounds(target.getBounds(), { padding: [20, 20] });
-    }
-  });
-  el("ward-clear").addEventListener("click", () => {
-    wardSelect.value = "";
-    wardSelect.dispatchEvent(new Event("change"));
-  });
-
-  // Ward boundaries
-  el("layer-wards").addEventListener("change", (e) => {
-    if (e.target.checked) loadWardLayer();
-    else if (wardLayer) map.removeLayer(wardLayer);
-  });
-
-  el("tree-card-close").addEventListener("click", () => selectTree(-1));
-
-  // Mobile bottom sheet
+function setupPanel() {
   const panel = el("panel");
   panel.dataset.open = "false";
   el("panel-toggle").addEventListener("click", () => {
@@ -1258,7 +1457,7 @@ function setupControls() {
   // Follow the OS theme: the palette lives in CSS, so re-read it and redraw.
   const dark = window.matchMedia("(prefers-color-scheme: dark)");
   const onTheme = () => {
-    if (map) {
+    if (map && baseLayer) {
       map.removeLayer(baseLayer);
       baseLayer = makeBaseLayer();
       baseLayer.addTo(map);
@@ -1268,16 +1467,14 @@ function setupControls() {
     recomputeColours();
     renderLegend();
     renderTaxaTable();
+    renderTaxonList();
     if (treeLayer) treeLayer.draw();
   };
   if (dark.addEventListener) dark.addEventListener("change", onTheme);
 }
 
 async function loadWardLayer() {
-  if (wardLayer) {
-    wardLayer.addTo(map);
-    return;
-  }
+  if (wardLayer) { wardLayer.addTo(map); wardLayer.bringToFront(); return; }
   try {
     const geojson = await loadJSON(DATA + "wards.geojson");
     wardLayer = L.geoJSON(geojson, {
@@ -1287,7 +1484,6 @@ async function loadWardLayer() {
     wardLayer.bringToFront();
   } catch (err) {
     showLoadError(`Couldn't load ward boundaries: ${err.message}`);
-    el("layer-wards").checked = false;
   }
 }
 
@@ -1297,7 +1493,11 @@ function makeBaseLayer() {
   const source = basemapSource(dark);
   return L.tileLayer(source.url, {
     attribution: source.attribution,
-    maxZoom: 19,
+    // detectRetina fetches @2x tiles one zoom level deeper, and pays for it by
+    // decrementing the layer's own maxZoom. Left at MAX_ZOOM that silently puts the
+    // deepest zoom above the layer's ceiling and the basemap disappears entirely, so
+    // the layer is given one level of headroom to give back.
+    maxZoom: MAX_ZOOM + 1,
     maxNativeZoom: source.maxNativeZoom,
     detectRetina: true,
   });
@@ -1323,15 +1523,17 @@ async function main() {
   trees.n = meta.tree_count;
   el("last-updated").textContent =
     `${fmt.format(meta.tree_count)} trees · City inventory updated ${String(meta.city_last_refreshed).slice(0, 10)}`;
+  meta.wards.forEach((w) => state.wards.add(parseInt(w.ward, 10)));
 
-  // Set the map up before the columns land, so there's something to look at.
   const hash = readHash();
+  if (hash && hash.mode) state.colourMode = hash.mode;
+
   baseLayer = makeBaseLayer();
   map = L.map("map", {
     center: (hash && hash.center) || TORONTO_CENTER,
     zoom: (hash && hash.zoom) || DEFAULT_ZOOM,
     minZoom: 10,
-    maxZoom: 19,
+    maxZoom: MAX_ZOOM,
     layers: [baseLayer],
     preferCanvas: true,
     worldCopyJump: false,
@@ -1358,8 +1560,7 @@ async function main() {
   }
 
   badgeText.textContent = "Indexing…";
-  // Yield once so the badge actually paints before the synchronous build work.
-  await new Promise((r) => setTimeout(r, 0));
+  await new Promise((r) => setTimeout(r, 0)); // let the badge paint before the sync work
 
   buildProjection();
   buildIndex();
@@ -1373,13 +1574,11 @@ async function main() {
   treeLayer = new TreeLayer();
   treeLayer.addTo(map);
 
-  setupControls();
-  setupMapInteraction();
-  renderDbhControls();
+  renderFilterBar();
   renderLegend();
-  renderTaxonList();
+  setupPanel();
+  setupMapInteraction();
   applyFilters();
-  renderWardStats();
   badge.hidden = true;
 
   // The address columns only matter once something is clicked, so they load last and
@@ -1396,7 +1595,11 @@ async function main() {
     trees.cross1 = cross1;
     trees.cross2 = cross2;
     trees.details = true;
-    if (state.selectedTree >= 0) renderTreeCard(state.selectedTree);
+    if (state.selectedTree >= 0) {
+      const i = state.selectedTree;
+      closePopup();
+      selectTree(i); // reopen, now that it can show an address
+    }
   } catch (err) {
     // Not fatal: the map and every filter work without street names.
     console.warn("Address columns unavailable:", err);

@@ -37,110 +37,61 @@
           <div class="stats" id="stats"></div>
         </header>
 
-        <!-- Selected tree. Hidden until something is clicked. -->
-        <section class="tree-card" id="tree-card" hidden>
-          <button class="tree-card-close" id="tree-card-close" aria-label="Close tree details">&times;</button>
-          <div id="tree-card-body"></div>
+        <!-- Chips, the ward checkboxes and the diameter slider are rendered by
+             map.js from one table, the same way the permit map renders its bar. -->
+        <div class="filter-bar" id="filter-bar"></div>
+
+        <div class="legend" id="map-legend"></div>
+
+        <section class="legend">
+          <h2>Most common trees <span id="table-scope" style="font-weight:500;text-transform:none;letter-spacing:0">citywide</span></h2>
+          <div id="taxa-table"></div>
         </section>
 
-        <div class="filter-bar">
-          <div class="filter-group">
-            <span class="filter-group-label">Colour by</span>
-            <div class="seg" id="colour-mode" role="radiogroup" aria-label="Colour trees by">
-              <button class="seg-btn" data-mode="origin" role="radio" aria-checked="true">Native or not</button>
-              <button class="seg-btn" data-mode="compare" role="radio" aria-checked="false">Compare species</button>
-              <button class="seg-btn" data-mode="dbh" role="radio" aria-checked="false">Trunk size</button>
-              <button class="seg-btn" data-mode="genus" role="radio" aria-checked="false">Genus</button>
-            </div>
-          </div>
+        <section class="about">
+          <h2>About this map</h2>
 
-          <!-- Legend + the controls specific to the active colour mode. -->
-          <div class="legend" id="legend"></div>
+          <p>
+            Every tree in the City of Toronto's street tree inventory &mdash; about
+            688,000 of them &mdash; coloured by whether it is native to Ontario, by
+            trunk size, or by species.
+          </p>
+          <p>
+            <strong>Native or not</strong> is the default: Norway maple alone is 69,474
+            trees, a tenth of every street tree in the city, and invasive.
+            <strong>Compare species</strong> picks out up to three at a time.
+            <strong>Trunk size</strong> shades by diameter, which reads as a map of
+            tree age.
+          </p>
 
-          <div class="filter-group" id="origin-filter">
-            <span class="filter-group-label">Origin</span>
-            <button class="filter-chip" data-active="true" data-group="origin" data-value="native">
-              <span class="swatch" data-swatch="native"></span>Native to Ontario
-            </button>
-            <button class="filter-chip" data-active="true" data-group="origin" data-value="non_native">
-              <span class="swatch" data-swatch="non_native"></span>Introduced
-            </button>
-            <button class="filter-chip" data-active="true" data-group="origin" data-value="invasive">
-              <span class="swatch" data-swatch="invasive"></span>Invasive
-            </button>
-            <button class="filter-chip" data-active="true" data-group="origin" data-value="unknown">
-              <span class="swatch" data-swatch="unknown"></span>Not identified to species
-            </button>
-          </div>
-
-          <div class="filter-group taxon-filter">
-            <div class="filter-group-label-row">
-              <span class="filter-group-label">Species &amp; genus</span>
-              <button class="link-btn" id="taxon-clear" hidden>Clear</button>
-            </div>
-            <div class="seg seg-sm" id="taxon-level" role="radiogroup" aria-label="Group by">
-              <button class="seg-btn" data-level="genus" role="radio" aria-checked="true">Genus</button>
-              <button class="seg-btn" data-level="species" role="radio" aria-checked="false">Species</button>
-            </div>
-            <input type="search" id="taxon-search" class="text-input" placeholder="Search maple, oak, Quercus&hellip;"
-                   autocomplete="off" aria-label="Search species or genus">
-            <div class="taxon-list" id="taxon-list" role="listbox" aria-label="Species and genus list"></div>
-          </div>
-
-          <div class="date-filter">
-            <div class="filter-group-label-row">
-              <span class="filter-group-label">Trunk diameter</span>
-              <span class="filter-group-note" id="dbh-readout"></span>
-            </div>
-            <div class="histogram" id="histogram" aria-hidden="true"></div>
-            <div class="range-slider" id="range-slider">
-              <div class="range-track"></div>
-              <div class="range-fill" id="range-fill"></div>
-              <input type="range" id="range-min" class="range-input" aria-label="Minimum trunk diameter">
-              <input type="range" id="range-max" class="range-input" aria-label="Maximum trunk diameter">
-            </div>
-            <div class="range-labels">
-              <span id="range-label-min"></span>
-              <span id="range-label-max"></span>
-            </div>
-            <label class="checkbox-row">
-              <input type="checkbox" id="dbh-include-unknown" checked>
-              <span>Include the <span id="dbh-unknown-count">0</span> trees with no diameter recorded</span>
-            </label>
-          </div>
-
-          <div class="filter-group">
-            <div class="filter-group-label-row">
-              <span class="filter-group-label">Ward</span>
-              <button class="link-btn" id="ward-clear" hidden>Clear</button>
-            </div>
-            <select id="ward-select" class="text-input" aria-label="Filter by ward">
-              <option value="">All 25 wards</option>
-            </select>
-            <div class="ward-stats" id="ward-stats"></div>
-          </div>
-
-          <div class="filter-group">
-            <label class="checkbox-row">
-              <input type="checkbox" id="layer-wards">
-              <span>Show ward boundaries</span>
-            </label>
-          </div>
-        </div>
-
-        <!-- The table view: the accessibility relief for colour-coded marks, and useful
-             on its own for "what actually grows here". -->
-        <section class="legend">
-          <h2>Most common trees <span class="muted" id="table-scope">citywide</span></h2>
-          <div class="taxa-table" id="taxa-table"></div>
-          <p class="legend-note" id="methodology">
-            Trunk diameter (DBH) is measured at breast height in centimetres.
-            Native status is resolved per species against a
+          <h3>Where the data comes from</h3>
+          <p>
+            The City's
+            <a href="https://open.toronto.ca/dataset/street-tree-data/">Street Tree Data</a>,
+            refreshed weekly, with
+            <a href="https://open.toronto.ca/dataset/city-wards/">ward boundaries</a>
+            for the overlay. Native status is resolved per species against a
             <a href="https://github.com/zuzubak/to-tree-map/blob/master/dbt/seeds/native_status.csv">curated list</a>
-            of Ontario-native trees; a tree the City recorded only to genus stays
-            &ldquo;not identified to species&rdquo; rather than being guessed at.
-            Positions come from the City's inventory, which geocodes each tree to its
-            street address &mdash; so dots sit on the parcel, not on the exact trunk.
+            of Ontario-native trees. The code that builds it is
+            <a href="https://github.com/zuzubak/to-tree-map">on GitHub</a>.
+          </p>
+
+          <h3>Caveats worth knowing</h3>
+          <p>
+            This is City-owned trees on the road allowance &mdash; not Toronto's whole
+            canopy. Park interiors, ravines and back yards are absent, which is why the
+            map thins out over the Don Valley and High Park.
+          </p>
+          <p>
+            Positions are geocoded to the street address, not surveyed at the trunk, so
+            a dot sits on the parcel rather than on the tree. Every tree at one address
+            lands on the same point.
+          </p>
+          <p>
+            A tree the City recorded only to genus stays &ldquo;not identified to
+            species&rdquo; rather than being guessed at &mdash; <em>Acer</em> alone could
+            be a sugar maple or a Norway maple. That is 47,466 trees, reported as their
+            own category instead of being folded into either side.
           </p>
         </section>
       </div>

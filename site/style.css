@@ -1,12 +1,6 @@
-/* Tokens follow the sibling to-multiplex-map project so the two maps read as one site.
-   The series colours are the validated data-viz palette: at most three hues plus a
-   neutral are ever on the map at once, because a dot map puts every pair of colours
-   side by side, and only three of the palette's hues stay distinguishable under
-   simulated colour-vision deficiency in that situation. */
 :root {
   color-scheme: light;
   --surface-1: #fcfcfb;
-  --surface-2: #f4f3f0;
   --page-plane: #f9f9f7;
   --text-primary: #0b0b0b;
   --text-secondary: #52514e;
@@ -14,30 +8,21 @@
   --gridline: #e1e0d9;
   --border: rgba(11, 11, 11, 0.10);
 
-  /* Origin / compare slots -- palette slots 3, 1, 2. */
-  --series-native: #1baf7a;
-  --series-introduced: #2a78d6;
-  --series-invasive: #eb6834;
-  --series-unknown: #898781;
-  --series-other: rgba(137, 135, 129, 0.55);
+  --series-cleared: #2a78d6;
+  --series-active: #eb6834;
 
-  /* Trunk-size ramp: one hue, light to dark, lightest step still >= 2:1 on the basemap. */
-  --seq-1: #6da7ec;
-  --seq-2: #3987e5;
-  --seq-3: #256abf;
-  --seq-4: #184f95;
-  --seq-5: #0d366b;
-
-  /* Full genus palette -- the documented eight, in the documented order. */
-  --gen-1: #2a78d6; --gen-2: #eb6834; --gen-3: #1baf7a; --gen-4: #eda100;
-  --gen-5: #e87ba4; --gen-6: #008300; --gen-7: #4a3aa7; --gen-8: #e34948;
+  --seq-100: #cde2fb;
+  --seq-200: #9ec5f4;
+  --seq-350: #5598e7;
+  --seq-450: #2a78d6;
+  --seq-550: #1c5cab;
+  --seq-700: #0d366b;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
     color-scheme: dark;
     --surface-1: #1a1a19;
-    --surface-2: #232322;
     --page-plane: #0d0d0d;
     --text-primary: #ffffff;
     --text-secondary: #c3c2b7;
@@ -45,24 +30,14 @@
     --gridline: #2c2c2a;
     --border: rgba(255, 255, 255, 0.10);
 
-    --series-native: #199e70;
-    --series-introduced: #3987e5;
-    --series-invasive: #d95926;
-    --series-unknown: #898781;
-    --series-other: rgba(137, 135, 129, 0.5);
-
-    --seq-1: #184f95;
-    --seq-2: #256abf;
-    --seq-3: #3987e5;
-    --seq-4: #6da7ec;
-    --seq-5: #b7d3f6;
-
-    --gen-1: #3987e5; --gen-2: #d95926; --gen-3: #199e70; --gen-4: #c98500;
-    --gen-5: #d55181; --gen-6: #008300; --gen-7: #9085e9; --gen-8: #e66767;
+    --series-cleared: #3987e5;
+    --series-active: #d95926;
   }
 }
 
-* { box-sizing: border-box; }
+* {
+  box-sizing: border-box;
+}
 
 html, body {
   margin: 0;
@@ -83,11 +58,23 @@ html, body {
   height: calc(100vh - var(--site-header-h, 0px));
 }
 
-#map-pane { flex: 1; min-width: 0; position: relative; }
-#map { position: absolute; inset: 0; background: var(--surface-2); }
+#map-pane {
+  flex: 1;
+  min-width: 0;
+  position: relative;
+}
+
+#map {
+  position: absolute;
+  inset: 0;
+}
 
 .panel {
-  flex: 0 0 390px;
+  flex: 0 0 380px;
+  /* 100% of .app, which already subtracts the shared header. Using 100vh here
+     overflows the app by the header's height and gives the document a second
+     scrollbar. */
+  height: 100%;
   overflow-y: auto;
   background: var(--surface-1);
   border-left: 1px solid var(--border);
@@ -95,261 +82,752 @@ html, body {
   flex-direction: column;
 }
 
-.panel-handle-row { display: none; }
-.panel-scroll { padding: 16px 20px 28px; }
+.panel-handle-row {
+  display: none;
+}
 
-.panel-header h1 { font-size: 16px; font-weight: 600; margin: 0; }
-.panel-header .subtitle { font-size: 12px; color: var(--text-muted); }
+.panel-scroll {
+  padding: 16px 20px 28px;
+}
 
-.stats { display: flex; flex-wrap: wrap; gap: 12px 20px; margin-top: 10px; }
-.stat-tile { text-align: left; }
-.stat-tile .stat-value { font-size: 18px; font-weight: 600; line-height: 1.1; }
-.stat-tile .stat-label { font-size: 11px; color: var(--text-muted); }
-
-/* ---- Filters ---- */
-
-.filter-bar { margin-top: 18px; display: flex; flex-direction: column; gap: 18px; }
-.filter-group { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
-
-.filter-group-label,
-.filter-group-label-row {
-  width: 100%;
-  font-size: 11px;
+.panel-header h1 {
+  font-size: 16px;
   font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
+  margin: 0;
+}
+
+.panel-header .subtitle {
+  font-size: 12px;
   color: var(--text-muted);
 }
-.filter-group-label-row {
-  display: flex; align-items: baseline; justify-content: space-between; gap: 8px;
+
+.stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 20px;
+  margin-top: 10px;
 }
-.filter-group-note { font-weight: 500; text-transform: none; letter-spacing: 0; }
+
+.stat-tile {
+  text-align: left;
+}
+
+.stat-tile .stat-value {
+  font-size: 18px;
+  font-weight: 600;
+  line-height: 1.1;
+}
+
+.stat-tile .stat-label {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.filter-bar {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 16px;
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+}
+
+/* display:flex would otherwise beat the UA sheet's [hidden] { display: none }
+   on specificity, so a group hidden by JS would stay on screen. */
+.filter-group[hidden] { display: none; }
+
+.filter-group {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.filter-group-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+  margin-right: 2px;
+}
 
 .filter-chip {
-  display: inline-flex; align-items: center; gap: 6px;
-  font: inherit; font-size: 12px;
-  padding: 5px 10px;
-  border: 1px solid var(--border);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px;
   border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--page-plane);
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  user-select: none;
+}
+
+.filter-chip .swatch {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+.filter-chip[data-active="true"] {
+  color: var(--text-primary);
+  border-color: var(--text-primary);
+}
+
+.filter-chip[data-active="false"] {
+  opacity: 0.5;
+}
+
+.date-filter {
+  align-self: stretch;
+}
+
+.histogram {
+  display: flex;
+  align-items: flex-end;
+  gap: 1px;
+  height: 44px;
+  margin-top: 6px;
+}
+
+.histogram-bar {
+  flex: 1 1 0;
+  min-width: 1px;
+  background: var(--series-cleared);
+  opacity: 0.85;
+  border-radius: 2px 2px 0 0;
+  transition: opacity 120ms ease;
+}
+
+.histogram-bar.out-of-range {
+  opacity: 0.2;
+}
+
+.range-slider {
+  position: relative;
+  height: 20px;
+  margin-top: 6px;
+}
+
+.range-track {
+  position: absolute;
+  top: 50%;
+  left: 0;
+  right: 0;
+  height: 4px;
+  transform: translateY(-50%);
+  background: var(--gridline);
+  border-radius: 2px;
+  pointer-events: none;
+}
+
+.range-fill {
+  position: absolute;
+  top: 50%;
+  height: 4px;
+  transform: translateY(-50%);
+  background: var(--series-cleared);
+  border-radius: 2px;
+  pointer-events: none;
+}
+
+.range-input {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 20px;
+  margin: 0;
   background: transparent;
+  -webkit-appearance: none;
+  appearance: none;
+  pointer-events: none;
+}
+
+.range-input::-webkit-slider-runnable-track {
+  -webkit-appearance: none;
+  background: transparent;
+  height: 20px;
+}
+
+.range-input::-moz-range-track {
+  background: transparent;
+  height: 20px;
+}
+
+.range-input::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  pointer-events: auto;
+  width: 14px;
+  height: 14px;
+  margin-top: 3px;
+  border-radius: 50%;
+  background: var(--surface-1);
+  border: 2px solid var(--series-cleared);
+  cursor: pointer;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+}
+
+.range-input::-moz-range-thumb {
+  pointer-events: auto;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--surface-1);
+  border: 2px solid var(--series-cleared);
+  cursor: pointer;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+}
+
+.range-labels {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-top: 4px;
+}
+
+.legend {
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.legend h2 {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+  margin: 0 0 6px;
+}
+
+.legend-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 3px 0;
+}
+
+.legend-row .swatch {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex: none;
+}
+
+.legend-note {
+  margin: 8px 0 0;
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+
+.legend-note strong {
+  color: var(--text-secondary);
+}
+
+.about {
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--text-secondary);
+}
+
+.about h2 {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+  margin: 0 0 8px;
+}
+
+.about h3 {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 14px 0 4px;
+}
+
+.about p {
+  margin: 0 0 8px;
+}
+
+.about a {
+  color: var(--series-cleared);
+}
+
+.noscript-note {
+  margin: 0;
+  padding: 16px 20px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-secondary);
+}
+
+.ward-bin-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 3px 0;
+  font-size: 11px;
+}
+
+.ward-bin-row .swatch {
+  width: 12px;
+  height: 12px;
+  border-radius: 2px;
+  flex: none;
+}
+
+.legend hr {
+  border: none;
+  border-top: 1px solid var(--gridline);
+  margin: 8px 0;
+}
+
+.leaflet-popup-content-wrapper {
+  background: var(--surface-1);
+  color: var(--text-primary);
+  border-radius: 6px;
+}
+
+.leaflet-popup-tip {
+  background: var(--surface-1);
+}
+
+.leaflet-popup-content {
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-size: 12px;
+  margin: 10px 12px;
+}
+
+.popup-title {
+  font-weight: 600;
+  font-size: 13px;
+  margin-bottom: 4px;
+}
+
+.popup-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 1px 0;
+}
+
+.popup-row .k {
+  color: var(--text-muted);
+}
+
+.popup-row .v {
+  font-weight: 500;
+  text-align: right;
+}
+
+.popup-description {
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px solid var(--gridline);
+  color: var(--text-secondary);
+  font-style: italic;
+  line-height: 1.4;
+}
+
+.load-error {
+  position: absolute;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+  font-size: 13px;
+  text-align: center;
+  padding: 20px;
+}
+
+/* ---- Mobile: full-screen map, bottom sheet for stats/filters ---- */
+
+@media (max-width: 860px) {
+  .app {
+    display: block;
+    height: calc(100vh - var(--site-header-h, 0px));
+  }
+
+  #map-pane {
+    position: fixed;
+    inset: var(--site-header-h, 0px) 0 0 0;
+  }
+
+  .panel {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 1000;
+    flex: none;
+    height: auto;
+    max-height: 42vh;
+    overflow-y: auto;
+    border-left: none;
+    border-top: 1px solid var(--border);
+    border-radius: 16px 16px 0 0;
+    box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.18);
+    transition: max-height 220ms ease;
+  }
+
+  /* Collapsed/expanded heights are set inline by JS from window.innerHeight, not from
+     these vh rules -- on mobile browsers, CSS vh is pinned to the LARGEST viewport (as
+     if the address bar were hidden), not the actually-visible one, so an "82vh" panel
+     can visually overflow past the real viewport whenever the address bar is showing.
+     window.innerHeight tracks the real, current viewport, so JS is the source of truth;
+     these are just a pre-JS fallback to avoid a flash of the wrong size. */
+  .panel[data-state="minimized"] {
+    max-height: 56px;
+  }
+
+  .panel[data-state="expanded"] {
+    max-height: 82vh;
+  }
+
+  .panel.dragging {
+    transition: none;
+  }
+
+  .panel-handle-row {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    display: flex;
+    align-items: center;
+    background: var(--surface-1);
+  }
+
+  .panel-drag-handle {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    padding: 10px 0 6px;
+    background: none;
+    border: none;
+    cursor: grab;
+    color: var(--text-secondary);
+    font: inherit;
+    touch-action: none;
+    user-select: none;
+  }
+
+  .handle-bar {
+    width: 36px;
+    height: 4px;
+    border-radius: 2px;
+    background: var(--gridline);
+  }
+
+  .handle-label {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--text-muted);
+  }
+
+  .panel[data-state="minimized"] .handle-label {
+    display: none;
+  }
+
+  .panel[data-state="expanded"] .handle-label::after {
+    content: " (tap to collapse)";
+  }
+
+  /* A dedicated, always-reliable escape hatch back to the map -- independent of the
+     drag/tap handling on panel-drag-handle, so there's always a guaranteed way out. */
+  .panel-hide-btn {
+    flex: none;
+    margin-right: 12px;
+    padding: 5px 10px;
+    border-radius: 999px;
+    border: 1px solid var(--border);
+    background: var(--page-plane);
+    color: var(--text-secondary);
+    font-size: 11px;
+    font-weight: 500;
+    cursor: pointer;
+  }
+
+  .panel[data-state="minimized"] .panel-hide-btn {
+    display: none;
+  }
+}
+
+/* ---- Mobile point markers + clusters (desktop keeps plain canvas circleMarkers) ---- */
+
+.point-badge {
+  border-radius: 50%;
+  border: 2px solid var(--surface-1);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
+}
+
+.cluster-badge {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  border: 2px solid var(--surface-1);
+  color: #ffffff;
+  font-weight: 600;
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
+}
+
+/* ==========================================================================
+   Tree-map additions.
+   Everything above this line is the shared stylesheet from to-multiplex-map,
+   copied verbatim so the two maps read as one site. Below are only the pieces
+   this map needs that the permit map has no equivalent for: the origin/size
+   palettes, the species picker, and the canvas overlay's furniture.
+   ========================================================================== */
+
+:root {
+  /* Origin slots -- palette slots 3, 1, 2. At most three hues plus a neutral are
+     ever on the map at once: a dot map puts every pair of colours side by side,
+     and only three of the palette's hues stay separable under simulated
+     colour-vision deficiency in that situation. */
+  --series-native: #1baf7a;
+  --series-introduced: #2a78d6;
+  --series-invasive: #eb6834;
+  --series-unknown: #898781;
+  --series-other: rgba(137, 135, 129, 0.55);
+
+  /* Trunk-size ramp: one hue, light to dark, lightest step still >= 2:1 on the basemap. */
+  --seq-1: #6da7ec;
+  --seq-2: #3987e5;
+  --seq-3: #256abf;
+  --seq-4: #184f95;
+  --seq-5: #0d366b;
+
+  /* Full genus palette -- the documented eight, in the documented order. */
+  --gen-1: #2a78d6; --gen-2: #eb6834; --gen-3: #1baf7a; --gen-4: #eda100;
+  --gen-5: #e87ba4; --gen-6: #008300; --gen-7: #4a3aa7; --gen-8: #e34948;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --series-native: #199e70;
+    --series-introduced: #3987e5;
+    --series-invasive: #d95926;
+    --series-unknown: #898781;
+    --series-other: rgba(137, 135, 129, 0.5);
+
+    --seq-1: #184f95;
+    --seq-2: #256abf;
+    --seq-3: #3987e5;
+    --seq-4: #6da7ec;
+    --seq-5: #b7d3f6;
+
+    --gen-1: #3987e5; --gen-2: #d95926; --gen-3: #199e70; --gen-4: #c98500;
+    --gen-5: #d55181; --gen-6: #008300; --gen-7: #9085e9; --gen-8: #e66767;
+  }
+}
+
+/* ---- Ward checkboxes + link buttons (from the permit map's chart.css) ----- */
+
+.ward-filter { align-self: stretch; width: 100%; }
+
+.ward-filter-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+
+.ward-actions { display: inline-flex; gap: 10px; }
+
+.link-btn {
+  background: none;
+  border: 0;
+  padding: 0;
+  font: inherit;
+  font-size: 11px;
+  color: var(--text-secondary);
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.link-btn:hover { color: var(--text-primary); }
+
+.ward-list {
+  max-height: 232px;
+  overflow-y: auto;
+  padding-right: 4px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.ward-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 10px;
+  font-size: 12.5px;
   color: var(--text-secondary);
   cursor: pointer;
 }
-.filter-chip[data-active="true"] {
-  background: var(--text-primary);
-  color: var(--surface-1);
-  border-color: var(--text-primary);
-}
-.filter-chip:focus-visible, .seg-btn:focus-visible, .link-btn:focus-visible {
-  outline: 2px solid var(--text-primary); outline-offset: 2px;
+
+.ward-row:hover { background: var(--page-plane); color: var(--text-primary); }
+.ward-row input { accent-color: var(--series-introduced); margin: 0; flex: none; }
+.ward-row .ward-name { flex: 1 1 auto; }
+
+.ward-row .ward-count {
+  font-variant-numeric: tabular-nums;
+  font-size: 11.5px;
+  color: var(--text-muted);
 }
 
-.swatch {
-  width: 10px; height: 10px; border-radius: 50%;
-  flex: 0 0 auto;
-  box-shadow: 0 0 0 1px var(--border);
+/* A standalone checkbox, distinct from the ward list's rows so the two don't get
+   confused for one another. */
+.check-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+  width: 100%;
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  cursor: pointer;
 }
-.swatch[data-swatch="native"] { background: var(--series-native); }
-.swatch[data-swatch="non_native"] { background: var(--series-introduced); }
-.swatch[data-swatch="invasive"] { background: var(--series-invasive); }
-.swatch[data-swatch="unknown"] { background: var(--series-unknown); }
+.check-row input { accent-color: var(--series-introduced); margin: 1px 0 0; flex: none; }
 
-/* Segmented control for the colour mode. */
-.seg {
-  display: flex; width: 100%;
-  border: 1px solid var(--border); border-radius: 8px; overflow: hidden;
+.filter-footnote {
+  margin: 18px 0 0;
+  font-size: 11.5px;
+  line-height: 1.55;
+  color: var(--text-muted);
 }
-.seg-btn {
-  flex: 1; font: inherit; font-size: 12px; padding: 7px 4px;
-  border: 0; border-right: 1px solid var(--border);
-  background: transparent; color: var(--text-secondary); cursor: pointer;
+
+.visually-hidden {
+  position: absolute;
+  width: 1px; height: 1px;
+  margin: -1px; padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
   white-space: nowrap;
-}
-.seg-btn:last-child { border-right: 0; }
-.seg-btn[aria-checked="true"] { background: var(--text-primary); color: var(--surface-1); }
-.seg-sm .seg-btn { font-size: 11px; padding: 5px 4px; }
-
-.text-input {
-  width: 100%; font: inherit; font-size: 13px;
-  padding: 7px 9px;
-  border: 1px solid var(--border); border-radius: 8px;
-  background: var(--surface-2); color: var(--text-primary);
-}
-.text-input:focus-visible { outline: 2px solid var(--text-primary); outline-offset: 1px; }
-
-.link-btn {
-  font: inherit; font-size: 11px; font-weight: 600;
-  text-transform: uppercase; letter-spacing: 0.06em;
-  background: none; border: 0; padding: 0;
-  color: var(--text-secondary); cursor: pointer; text-decoration: underline;
+  border: 0;
 }
 
-.taxon-filter { gap: 8px; }
+/* ---- Species / genus picker ----------------------------------------------
+   Same row rhythm as the ward list, plus a search box: 73 genera and 190
+   species are too many to scan as chips. */
+
+.taxon-search {
+  width: 100%;
+  font: inherit;
+  font-size: 12.5px;
+  padding: 6px 9px;
+  margin-bottom: 6px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-1);
+  color: var(--text-primary);
+}
+
+.taxon-search:focus-visible { outline: 2px solid var(--text-primary); outline-offset: 1px; }
 
 .taxon-list {
-  width: 100%; max-height: 208px; overflow-y: auto;
-  border: 1px solid var(--border); border-radius: 8px;
+  max-height: 232px;
+  overflow-y: auto;
+  padding-right: 4px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
 }
+
 .taxon-row {
-  display: flex; align-items: center; gap: 8px;
-  width: 100%; text-align: left;
-  font: inherit; font-size: 12px;
-  padding: 6px 9px;
-  background: transparent; border: 0; border-bottom: 1px solid var(--gridline);
-  color: var(--text-secondary); cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  text-align: left;
+  font: inherit;
+  font-size: 12.5px;
+  padding: 5px 10px;
+  background: none;
+  border: 0;
+  color: var(--text-secondary);
+  cursor: pointer;
 }
-.taxon-row:last-child { border-bottom: 0; }
-.taxon-row:hover { background: var(--surface-2); }
-.taxon-row[aria-selected="true"] { background: var(--surface-2); color: var(--text-primary); font-weight: 600; }
-.taxon-row .tr-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.taxon-row .tr-count { font-variant-numeric: tabular-nums; color: var(--text-muted); font-size: 11px; }
-.taxon-row .tr-sci { color: var(--text-muted); font-style: italic; font-weight: 400; }
+
+.taxon-row:hover { background: var(--page-plane); color: var(--text-primary); }
+.taxon-row[aria-selected="true"] { color: var(--text-primary); font-weight: 600; }
+.taxon-row input { accent-color: var(--series-introduced); margin: 0; flex: none; }
+.taxon-row .taxon-name { flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.taxon-row .taxon-sci { color: var(--text-muted); font-style: italic; }
+.taxon-row .taxon-count {
+  font-variant-numeric: tabular-nums;
+  font-size: 11.5px;
+  color: var(--text-muted);
+}
 .taxon-empty { padding: 10px; font-size: 12px; color: var(--text-muted); }
 
-.checkbox-row {
-  display: flex; align-items: flex-start; gap: 7px;
-  width: 100%; font-size: 12px; color: var(--text-secondary); cursor: pointer;
+/* Compare mode: three slots the reader fills from the species list. */
+.compare-slot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  padding: 4px 8px;
+  margin-bottom: 4px;
+  border: 1px dashed var(--border);
+  border-radius: 6px;
 }
-.checkbox-row input { margin: 1px 0 0; flex: 0 0 auto; }
-
-/* ---- Trunk-diameter histogram + dual range slider ---- */
-
-.date-filter { display: flex; flex-direction: column; gap: 8px; }
-
-.histogram {
-  display: flex; align-items: flex-end; gap: 1px;
-  height: 44px; width: 100%;
-}
-.histogram .hbar { flex: 1; background: var(--gridline); min-height: 1px; border-radius: 1px 1px 0 0; }
-.histogram .hbar[data-in-range="true"] { background: var(--seq-3); }
-
-.range-slider { position: relative; height: 22px; width: 100%; }
-.range-track, .range-fill {
-  position: absolute; top: 9px; height: 4px; border-radius: 2px;
-}
-.range-track { left: 0; right: 0; background: var(--gridline); }
-.range-fill { background: var(--text-primary); }
-.range-input {
-  position: absolute; top: 0; left: 0; width: 100%; height: 22px;
-  margin: 0; background: none; pointer-events: none; -webkit-appearance: none; appearance: none;
-}
-.range-input::-webkit-slider-thumb {
-  -webkit-appearance: none; pointer-events: auto;
-  width: 15px; height: 15px; border-radius: 50%;
-  background: var(--surface-1); border: 2px solid var(--text-primary); cursor: pointer;
-}
-.range-input::-moz-range-thumb {
-  pointer-events: auto;
-  width: 15px; height: 15px; border-radius: 50%;
-  background: var(--surface-1); border: 2px solid var(--text-primary); cursor: pointer;
-}
-.range-labels {
-  display: flex; justify-content: space-between;
-  font-size: 11px; color: var(--text-muted); font-variant-numeric: tabular-nums;
+.compare-slot[data-filled="true"] { border-style: solid; color: var(--text-primary); }
+.compare-slot .compare-name { flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.compare-slot .compare-count { font-variant-numeric: tabular-nums; font-size: 11px; color: var(--text-muted); }
+.compare-slot .compare-remove {
+  font: inherit; font-size: 14px; line-height: 1;
+  background: none; border: 0; padding: 0 2px;
+  color: var(--text-muted); cursor: pointer;
 }
 
-/* ---- Legend ---- */
-
-.legend { margin-top: 4px; }
-.legend h2 {
-  font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em;
-  color: var(--text-muted); margin: 18px 0 8px;
-}
-.legend h2 .muted { font-weight: 500; text-transform: none; letter-spacing: 0; }
-.legend-row {
-  display: flex; align-items: center; gap: 8px;
-  font-size: 12px; color: var(--text-secondary); padding: 2px 0;
-}
-.legend-row .legend-count {
-  margin-left: auto; font-variant-numeric: tabular-nums; color: var(--text-muted); font-size: 11px;
-}
-.legend-note { font-size: 11px; line-height: 1.5; color: var(--text-muted); margin: 10px 0 0; }
-.legend-note a { color: var(--text-secondary); }
-
-/* The sequential ramp legend: a continuous bar, not eight swatches. */
-.ramp-legend { display: flex; flex-direction: column; gap: 4px; width: 100%; }
-.ramp-bar { display: flex; height: 10px; border-radius: 2px; overflow: hidden; }
+/* The sequential legend is a continuous bar, not five swatches. */
+.ramp-bar { display: flex; height: 10px; border-radius: 2px; overflow: hidden; margin-bottom: 4px; }
 .ramp-bar span { flex: 1; }
 .ramp-labels {
   display: flex; justify-content: space-between;
   font-size: 11px; color: var(--text-muted); font-variant-numeric: tabular-nums;
+  margin-bottom: 6px;
 }
 
-/* Compare mode: three slots the reader fills from the species list. */
-.compare-slots { display: flex; flex-direction: column; gap: 4px; width: 100%; }
-.compare-slot {
-  display: flex; align-items: center; gap: 8px;
-  font-size: 12px; color: var(--text-secondary);
-  padding: 4px 6px; border: 1px dashed var(--border); border-radius: 6px;
-}
-.compare-slot[data-filled="true"] { border-style: solid; color: var(--text-primary); }
-.compare-slot .cs-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.compare-slot .cs-count { font-variant-numeric: tabular-nums; color: var(--text-muted); font-size: 11px; }
-.compare-slot .cs-remove {
-  font: inherit; background: none; border: 0; padding: 0 2px;
-  color: var(--text-muted); cursor: pointer; font-size: 14px; line-height: 1;
-}
-.compare-hint { font-size: 11px; color: var(--text-muted); margin: 2px 0 0; }
+/* ---- Taxa table: the same data without colour ---------------------------- */
 
-/* ---- Taxa table (the non-colour read of the same data) ---- */
-
-.taxa-table { display: flex; flex-direction: column; }
 .taxa-row {
-  display: grid; grid-template-columns: 10px 1fr auto auto;
-  align-items: center; gap: 8px;
-  font-size: 12px; padding: 4px 0;
+  display: grid;
+  grid-template-columns: 10px 1fr auto auto;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  padding: 3px 0;
   border-bottom: 1px solid var(--gridline);
   color: var(--text-secondary);
 }
 .taxa-row:last-child { border-bottom: 0; }
-.taxa-row .tx-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.taxa-row .tx-count, .taxa-row .tx-share {
-  font-variant-numeric: tabular-nums; color: var(--text-muted); font-size: 11px;
+.taxa-row .taxa-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.taxa-row .taxa-count, .taxa-row .taxa-share {
+  font-variant-numeric: tabular-nums; font-size: 11px; color: var(--text-muted);
 }
-.taxa-row .tx-share { min-width: 38px; text-align: right; }
+.taxa-row .taxa-share { min-width: 38px; text-align: right; }
 
-/* ---- Ward stats ---- */
+/* ---- Canvas overlay furniture -------------------------------------------- */
 
-.ward-stats { width: 100%; display: flex; flex-wrap: wrap; gap: 8px 16px; margin-top: 4px; }
-.ward-stats:empty { display: none; }
-
-/* ---- Selected tree card ---- */
-
-.tree-card {
-  position: relative;
-  margin-top: 16px; padding: 12px 14px;
-  background: var(--surface-2);
-  border: 1px solid var(--border); border-radius: 10px;
-}
-.tree-card-close {
-  position: absolute; top: 6px; right: 8px;
-  font: inherit; font-size: 18px; line-height: 1;
-  background: none; border: 0; color: var(--text-muted); cursor: pointer;
-}
-.tree-title { font-size: 15px; font-weight: 600; padding-right: 18px; }
-.tree-sci { font-size: 12px; font-style: italic; color: var(--text-secondary); margin-bottom: 8px; }
-.tree-badges { display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 10px; }
-.tree-badge {
-  display: inline-flex; align-items: center; gap: 5px;
-  font-size: 11px; font-weight: 600;
-  padding: 3px 8px; border-radius: 999px;
-  border: 1px solid var(--border); color: var(--text-secondary);
-}
-.tree-row { display: flex; gap: 10px; font-size: 12px; padding: 2px 0; }
-.tree-row .k { color: var(--text-muted); flex: 0 0 116px; }
-.tree-row .v { color: var(--text-primary); }
-.tree-note {
-  font-size: 11px; line-height: 1.5; color: var(--text-secondary);
-  margin: 10px 0 0; padding-top: 8px; border-top: 1px solid var(--border);
-}
-
-/* The trunk-size figure: a bar whose width is the trunk against the widest in the city. */
-.dbh-figure { margin: 8px 0 2px; }
-.dbh-figure-bar { height: 6px; background: var(--gridline); border-radius: 3px; overflow: hidden; }
-.dbh-figure-fill { height: 100%; background: var(--seq-3); border-radius: 3px; }
-.dbh-figure-label { font-size: 11px; color: var(--text-muted); margin-top: 3px; }
-
-/* ---- Map furniture ---- */
+#tree-canvas { position: absolute; pointer-events: none; }
 
 .map-badge {
   position: absolute; z-index: 500;
@@ -371,30 +849,6 @@ html, body {
 @keyframes spin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .spinner { animation-duration: 2.4s; } }
 
-.load-error {
-  position: absolute; inset: auto 16px 16px; z-index: 600;
-  padding: 12px 14px; font-size: 13px;
-  background: var(--surface-1); color: var(--text-primary);
-  border: 1px solid var(--border); border-left: 3px solid var(--series-invasive);
-  border-radius: 8px;
-}
-
-#tree-canvas { position: absolute; pointer-events: none; }
-
-.leaflet-container {
-  background: var(--surface-2);
-  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
-}
-.leaflet-control-attribution {
-  background: rgba(252, 252, 251, 0.82) !important;
-  color: var(--text-muted) !important;
-  font-size: 10px !important;
-}
-.leaflet-control-attribution a { color: var(--text-secondary) !important; }
-@media (prefers-color-scheme: dark) {
-  .leaflet-control-attribution { background: rgba(26, 26, 25, 0.82) !important; }
-}
-
 /* Hover readout, so identity never rests on colour alone. */
 .tree-tip {
   position: absolute; z-index: 550; pointer-events: none;
@@ -405,38 +859,32 @@ html, body {
   box-shadow: 0 1px 6px rgba(0, 0, 0, 0.14);
 }
 .tree-tip[hidden] { display: none; }
-.tree-tip .tt-sci { color: var(--text-muted); font-style: italic; }
+.tree-tip .tree-tip-sci { color: var(--text-muted); font-style: italic; }
 
-/* ---- Mobile: the panel becomes a bottom sheet ---- */
+/* ---- Popup extras --------------------------------------------------------
+   .popup-title / .popup-row / .popup-description come from the shared sheet;
+   these are the two pieces specific to a tree. */
 
-@media (max-width: 760px) {
-  .app { flex-direction: column; }
-  #map-pane { flex: 1 1 auto; }
-
-  .panel {
-    flex: 0 0 auto;
-    max-height: 62vh;
-    border-left: 0;
-    border-top: 1px solid var(--border);
-    box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.08);
-  }
-  .panel[data-open="false"] .panel-scroll { display: none; }
-
-  .panel-handle-row {
-    display: flex; align-items: center; gap: 8px;
-    padding: 8px 14px; background: var(--surface-1);
-  }
-  .panel-drag-handle {
-    display: flex; align-items: center; gap: 9px;
-    flex: 1; font: inherit; background: none; border: 0; padding: 0;
-    color: var(--text-secondary); cursor: pointer;
-  }
-  .handle-bar { width: 26px; height: 3px; border-radius: 2px; background: var(--text-muted); }
-  .handle-label { font-size: 12px; font-weight: 600; }
-  .panel-hide-btn {
-    font: inherit; font-size: 11px; background: none; border: 0;
-    color: var(--text-muted); cursor: pointer;
-  }
-  .panel[data-open="false"] .panel-hide-btn { display: none; }
-  .tree-row .k { flex: 0 0 96px; }
+.popup-badge {
+  display: inline-flex; align-items: center; gap: 5px;
+  font-size: 11px; font-weight: 600;
+  margin-bottom: 6px;
+  color: var(--text-secondary);
 }
+.popup-badge .swatch,
+.taxa-row .swatch,
+.compare-slot .swatch,
+.taxon-row .swatch {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex: none;
+}
+
+.popup-badge .swatch,
+.taxon-row .swatch { box-shadow: 0 0 0 1px var(--border); }
+
+.popup-figure { margin: 6px 0 2px; }
+.popup-figure-bar { height: 5px; background: var(--gridline); border-radius: 3px; overflow: hidden; }
+.popup-figure-fill { height: 100%; background: var(--seq-3); border-radius: 3px; }
+.popup-figure-label { font-size: 11px; color: var(--text-muted); margin-top: 3px; }
