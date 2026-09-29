@@ -17,6 +17,7 @@ select
     count(distinct case when species is not null then genus || ' ' || species end) as species_count,
     count(distinct genus) as genus_count,
     count(*) filter (where native_status = 'native') as native_count,
+    count(*) filter (where native_status = 'native_eastern_na') as native_eastern_na_count,
     count(*) filter (where native_status = 'non_native') as non_native_count,
     count(*) filter (where native_status = 'unknown') as unknown_count,
     count(*) filter (where invasive) as invasive_count,
@@ -24,7 +25,7 @@ select
     -- number down in wards where inspectors recorded less detail.
     round(
         100.0 * count(*) filter (where native_status = 'native')
-        / nullif(count(*) filter (where native_status in ('native', 'non_native')), 0),
+        / nullif(count(*) filter (where native_status in ('native', 'native_eastern_na', 'non_native')), 0),
         1
     ) as native_pct,
     round(avg(dbh_cm), 1) as mean_dbh_cm,

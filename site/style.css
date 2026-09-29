@@ -597,11 +597,20 @@ html, body {
    ========================================================================== */
 
 :root {
-  /* Origin slots -- palette slots 3, 1, 2. At most three hues plus a neutral are
-     ever on the map at once: a dot map puts every pair of colours side by side,
-     and only three of the palette's hues stay separable under simulated
-     colour-vision deficiency in that situation. */
+  /* Origin slots. A dot map puts every pair of colours side by side, so all pairs have
+     to survive simulated colour-vision deficiency, not just neighbouring legend entries.
+     None of the documented palette's own hues can be the fourth here -- violet collides
+     with blue in dark mode (CVD dE 1.9), magenta with orange in light (12.9) -- so the
+     fourth slot is a magenta stepped to clear every gate in both modes: worst all-pairs
+     CVD dE 9.2 light / 9.4 dark, normal-vision 22.1 / 20.9.
+
+     It would read better as a second shade of the native green, since the two native
+     tiers nest. That isn't available: a same-hue step light enough to clear the
+     normal-vision floor (dE 15) lands outside the lightness band, and no four-colour set
+     exists with two hues closer than 56 degrees apart. Hue carries "different category"
+     here; the legend ordering and labels carry "both are native". */
   --series-native: #1baf7a;
+  --series-native-ena: #ad3aa2;
   --series-introduced: #2a78d6;
   --series-invasive: #eb6834;
   --series-unknown: #898781;
@@ -622,6 +631,7 @@ html, body {
 @media (prefers-color-scheme: dark) {
   :root {
     --series-native: #199e70;
+    --series-native-ena: #b03da5;
     --series-introduced: #3987e5;
     --series-invasive: #d95926;
     --series-unknown: #898781;

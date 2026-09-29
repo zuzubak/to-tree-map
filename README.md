@@ -12,9 +12,9 @@ shape: Python ingest → DuckDB → dbt → static export → a Leaflet map on G
 
 ## What you can do with it
 
-- **Colour by origin** (the default) — native to Ontario, introduced, introduced *and*
-  invasive, or not identified past genus. Norway maple alone is 69,474 trees, a tenth of
-  every street tree in the city, and it lights up the map.
+- **Colour by origin** (the default) — native to Ontario, native to eastern North America,
+  introduced, introduced *and* invasive, or not identified past genus. Norway maple alone is
+  69,474 trees, a tenth of every street tree in the city, and it lights up the map.
 - **Colour by trunk size** — a sequential ramp over diameter at breast height, which reads
   as a map of tree age and shows where the old canopy actually is.
 - **Compare species or genera** — pick up to three and everything else drops to grey.
@@ -70,7 +70,8 @@ pair, the API emits a flat `Point`), so both shapes are unpacked.
 
 ## Native vs non-native
 
-"Native" here means **indigenous to Ontario before European settlement**. The judgements live
+"Native" here means **indigenous to Ontario before European settlement**, and there is a
+second tier for trees that belong to the same forest without belonging to this place. The judgements live
 in [`dbt/seeds/native_status.csv`](dbt/seeds/native_status.csv) — 218 hand-curated rows, one
 per taxon, each with an origin region and a note. Corrections are welcome as PRs; it is a
 plain CSV on purpose.
@@ -82,6 +83,12 @@ Three things worth knowing about how it's applied:
   sugar maple or a Norway maple — a genus-only record stays "not identified to species"
   rather than being guessed. That's 47,466 trees (7%), reported as their own category
   instead of being quietly folded into either side.
+- **Native to eastern North America is its own tier**, not a kind of introduced. It means a
+  wild range east of roughly the Mississippi, with that line carried north into Canada, that
+  never reached Ontario: honey locust, black locust, northern catalpa, sweetgum, yellow
+  buckeye. 13 species, 77,713 trees, 12% of the inventory. Colorado blue spruce, Douglas fir,
+  western red cedar and Nootka cypress stay introduced — native to Canada, but to the other
+  side of the continent, and no part of this forest.
 - **Invasive is tracked separately from introduced**, because most introduced street trees
   are harmless and a few are not. 15 taxa are flagged, covering 136,410 trees.
 - **Contested cases are labelled, not hidden.** Honey locust (59,904 trees, the third most
@@ -89,7 +96,8 @@ Three things worth knowing about how it's applied:
   Ontario, treated here as introduced, with the reasoning in its `notes` column. It moves the
   citywide native share by about nine points on its own.
 
-Citywide the result is **38.9% native** among trees identified to species.
+Citywide the result is **38.9% native to Ontario** among trees identified to species, with a
+further **12% native to eastern North America**.
 
 Some of the most-planted trees are species that are *at risk* in Canada — Kentucky
 coffeetree (21,482 trees, threatened), butternut, cucumber tree, Shumard oak, flowering
@@ -181,8 +189,16 @@ distinguishable, not just neighbouring ones in a legend. Checking every subset o
 palette's eight hues against simulated protanopia and deuteranopia, **three is the largest
 set that passes in both light and dark mode** — no four-hue subset does.
 
-So the three-hue modes (origin, compare) are the accessible defaults, and the honest version
-of "colour by genus" is *compare up to three*, not 73 hues. Two findings from actually
+The origin mode needs four, and gets them — but only because the fourth is a magenta chosen
+by search rather than taken from the palette. None of the documented hues can fill that slot:
+violet collides with blue in dark mode (CVD ΔE 1.9), magenta with orange in light (12.9). It
+would read better as a second shade of the native green, since the two native tiers nest, but
+that isn't available either: a same-hue step light enough to clear the normal-vision floor
+lands outside the lightness band, and no four-colour set exists with two hues closer than 56°
+apart. Hue carries "different category"; the legend ordering and labels carry "both native".
+
+For everything else three is the ceiling, so the honest version of "colour by genus" is
+*compare up to three*, not 73 hues. Two findings from actually
 running the numbers rather than eyeballing them:
 
 - Green-for-native and orange-for-introduced — the obvious semantic choice — collapses to

@@ -20,7 +20,7 @@ Acer spicatum,species,native,false,Ontario,
 Acer tataricum,species,non_native,true,Eurasia,"Includes Amur maple (subsp. ginnala), listed as invasive in Ontario"
 Acer truncatum,species,non_native,false,China,
 Acer x freemanii,species,native,false,Ontario,A nursery hybrid of two Ontario natives (A. rubrum x A. saccharinum); the cross also occurs in the wild
-Aesculus flava,species,non_native,false,Eastern United States,An Appalachian species; does not reach Canada
+Aesculus flava,species,native_eastern_na,false,Eastern United States,An Appalachian species; reaches Canada only as a planting
 Aesculus glabra,species,native,false,Ontario,Reaches its northern limit in extreme southwestern Ontario
 Aesculus hippocastanum,species,non_native,false,Balkans,
 Aesculus x carnea,species,non_native,false,Garden hybrid,Garden hybrid of A. hippocastanum and A. pavia; both parents exotic
@@ -30,12 +30,12 @@ Alnus glutinosa,species,non_native,true,Europe,Invades wet ground
 Amelanchier canadensis,species,native,false,Ontario,
 Amelanchier laevis,species,native,false,Ontario,
 Amelanchier x grandiflora,species,native,false,Ontario,Hybrid of two native serviceberries (A. arborea x A. laevis)
-Aralia spinosa,species,non_native,false,Southeastern United States,
+Aralia spinosa,species,native_eastern_na,false,Southeastern United States,
 Asimina triloba,species,native,false,Ontario,Carolinian
 Betula,genus,unknown,false,mixed,Four native birches; European white birch is a common planting
 Betula alleghaniensis,species,native,false,Ontario,
 Betula lenta,species,native,false,Ontario,Rare; only a handful of native Ontario populations
-Betula nigra,species,non_native,false,Eastern United States,"Widely planted here, but not naturally occurring in Canada"
+Betula nigra,species,native_eastern_na,false,Eastern United States,Widely planted here; its wild range stops short of Canada
 Betula papyrifera,species,native,false,Ontario,
 Betula pendula,species,non_native,false,Eurasia,
 Betula populifolia,species,native,false,Ontario,
@@ -50,13 +50,13 @@ Carya laciniosa,species,native,false,Ontario,Rare; Carolinian
 Carya ovata,species,native,false,Ontario,
 Castanea dentata,species,native,false,Ontario,Endangered in Canada after chestnut blight
 Castanea sativa,species,non_native,false,Southern Europe,
-Catalpa bignonioides,species,non_native,false,Southeastern United States,
-Catalpa speciosa,species,non_native,false,Central United States,"Naturalised here, but not native to Canada"
+Catalpa bignonioides,species,native_eastern_na,false,Southeastern United States,
+Catalpa speciosa,species,native_eastern_na,false,Central United States,"Native to the Mississippi valley; naturalised, but not wild in Canada"
 Celtis occidentalis,species,native,false,Ontario,
 Cercidiphyllum japonicum,species,non_native,false,Japan and China,
 Cercis canadensis,species,native,false,Ontario,Reaches Canada only around Pelee; nearly every street specimen is planted
 Chamaecyparis pisifera,species,non_native,false,Japan,
-Cladrastis kentukea,species,non_native,false,Southeastern United States,
+Cladrastis kentukea,species,native_eastern_na,false,Southeastern United States,
 Cornus,genus,unknown,false,mixed,Several native dogwoods; cornelian cherry is exotic
 Cornus florida,species,native,false,Ontario,Endangered in Canada
 Cornus foemina,species,native,false,Ontario,
@@ -64,11 +64,11 @@ Cornus mas,species,non_native,false,Europe,
 Corylus,genus,unknown,false,mixed,American and beaked hazel are native; Turkish hazel is planted
 Corylus americana,species,native,false,Ontario,
 Corylus colurna,species,non_native,false,Southeast Europe and Asia,
-Cotinus obovatus,species,non_native,false,Southeastern United States,
+Cotinus obovatus,species,native_eastern_na,false,Southeastern United States,
 Crataegus,genus,unknown,false,mixed,Ontario has many native hawthorns; European species are also planted
 Crataegus crus-galli,species,native,false,Ontario,
 Crataegus laevigata,species,non_native,false,Europe,
-Crataegus viridis,species,non_native,false,Southeastern United States,
+Crataegus viridis,species,native_eastern_na,false,Southeastern United States,
 Elaeagnus angustifolia,species,non_native,true,Eurasia,Restricted-invasive in Ontario
 Euonymus alatus,species,non_native,true,East Asia,Invasive in woodlands
 Fagus,genus,unknown,false,mixed,American beech is native; European beech is a common street planting
@@ -82,7 +82,7 @@ Fraxinus nigra,species,native,false,Ontario,
 Fraxinus pennsylvanica,species,native,false,Ontario,
 Fraxinus quadrangulata,species,native,false,Ontario,Threatened in Canada
 Ginkgo biloba,species,non_native,false,China,
-Gleditsia triacanthos,species,non_native,false,Central United States,"Sometimes reported as native to extreme southwestern Ontario; treated as introduced here, following VASCAN"
+Gleditsia triacanthos,species,native_eastern_na,false,Central United States,"Sometimes reported as native to extreme southwestern Ontario; treated here as eastern North American but not Ontarian, following VASCAN"
 Gymnocladus dioicus,species,native,false,Ontario,"Threatened in Canada, yet one of Toronto's most-planted street trees"
 Hamamelis virginiana,species,native,false,Ontario,
 Juglans,genus,unknown,false,mixed,Butternut and black walnut are native; English walnut is planted
@@ -96,7 +96,7 @@ Laburnum x watereri,species,non_native,false,Garden hybrid,Garden hybrid; Europe
 Larix decidua,species,non_native,false,Europe,
 Larix kaempferi,species,non_native,false,Japan,
 Larix laricina,species,native,false,Ontario,
-Liquidambar styraciflua,species,non_native,false,Eastern United States,
+Liquidambar styraciflua,species,native_eastern_na,false,Eastern United States,
 Liriodendron tulipifera,species,native,false,Ontario,Carolinian
 Maackia amurensis,species,non_native,false,Northeast Asia,
 Magnolia acuminata,species,native,false,Ontario,Canada's only native magnolia; endangered
@@ -162,7 +162,7 @@ Quercus acutissima,species,non_native,false,East Asia,
 Quercus alba,species,native,false,Ontario,
 Quercus bicolor,species,native,false,Ontario,
 Quercus coccinea,species,native,false,Ontario,Rare in Ontario
-Quercus imbricaria,species,non_native,false,Central United States,Not naturally occurring in Canada
+Quercus imbricaria,species,native_eastern_na,false,Central United States,Its wild range stops short of Canada
 Quercus macrocarpa,species,native,false,Ontario,
 Quercus muehlenbergii,species,native,false,Ontario,Rare; Carolinian
 Quercus palustris,species,native,false,Ontario,
@@ -172,7 +172,7 @@ Quercus shumardii,species,native,false,Ontario,Endangered in Canada
 Quercus velutina,species,native,false,Ontario,
 Rhamnus cathartica,species,non_native,true,Eurasia,One of Ontario's worst woodland invaders
 Rhus typhina,species,native,false,Ontario,
-Robinia pseudoacacia,species,non_native,true,Appalachian United States,"Native to the US Appalachians, but invasive in Ontario"
+Robinia pseudoacacia,species,native_eastern_na,true,Appalachian United States,"Native to the US Appalachians, but invasive once planted in Ontario"
 Salix,genus,unknown,false,mixed,Many native willows; weeping and corkscrew willows are exotic
 Salix discolor,species,native,false,Ontario,
 Salix fragilis,species,non_native,false,Eurasia,
@@ -191,7 +191,7 @@ Sorbus decora,species,native,false,Ontario,
 Sorbus thuringiaca,species,non_native,false,Garden hybrid,
 Syringa,genus,non_native,false,Eurasia,No lilac is native to North America
 Syringa reticulata,species,non_native,false,Japan,
-Taxodium distichum,species,non_native,false,Southeastern United States,
+Taxodium distichum,species,native_eastern_na,false,Southeastern United States,
 Taxus,genus,unknown,false,mixed,Canada yew is native; Japanese yew and its hybrids are planted
 Taxus cuspidata,species,non_native,false,Japan,
 Thuja,genus,unknown,false,mixed,Eastern white cedar is native; western red cedar is not

@@ -67,6 +67,7 @@ const CIRCLE_ZOOM = 15;
 /* Colour slots, read from CSS so light/dark and the palette live in one place. */
 const SLOT_VARS = {
   native: "--series-native",
+  nativeEasternNa: "--series-native-ena",
   introduced: "--series-introduced",
   invasive: "--series-invasive",
   unknown: "--series-unknown",
@@ -195,7 +196,7 @@ let colourIdx = null;   // Uint8: index into the active palette; 0 is always "ot
 const state = {
   colourMode: "origin",
   taxonLevel: "genus",
-  origin: new Set(["native", "non_native", "invasive", "unknown"]),
+  origin: new Set(["native", "native_eastern_na", "non_native", "invasive", "unknown"]),
   selectedTaxa: new Set(),   // genus names or species keys, per taxonLevel
   compare: [],               // ordered, max COMPARE_LIMIT
   dbhMin: 0,
@@ -287,7 +288,11 @@ function buildTaxonLookups() {
   const speciesPos = new Map(meta.species.map((s, i) => [s.key, i]));
 
   taxa.forEach((t, i) => {
-    originClass[i] = t.native === "native" ? 1 : t.invasive ? 3 : t.native === "non_native" ? 2 : 0;
+    originClass[i] = t.native === "native" ? 1
+      : t.native === "native_eastern_na" ? (t.invasive ? 4 : 2)
+      : t.invasive ? 4
+      : t.native === "non_native" ? 3
+      : 0;
     genusIdx[i] = genusPos.has(t.genus) ? genusPos.get(t.genus) : 0xffff;
     const key = t.species ? `${t.genus} ${t.species}` : null;
     speciesIdx[i] = key && speciesPos.has(key) ? speciesPos.get(key) : 0xffff;
@@ -310,6 +315,7 @@ function recomputeVisible() {
   const originMask = [
     state.origin.has("unknown"),
     state.origin.has("native"),
+    state.origin.has("native_eastern_na"),
     state.origin.has("non_native"),
     state.origin.has("invasive"),
   ];
@@ -362,8 +368,10 @@ const palette = { css: [], packed: null, labels: [] };
 function rebuildPalette() {
   let css;
   if (state.colourMode === "origin") {
-    css = [SLOT_VARS.unknown, SLOT_VARS.native, SLOT_VARS.introduced, SLOT_VARS.invasive].map(cssVar);
-    palette.labels = ["Not identified to species", "Native to Ontario", "Introduced", "Introduced & invasive"];
+    css = [SLOT_VARS.unknown, SLOT_VARS.native, SLOT_VARS.nativeEasternNa,
+           SLOT_VARS.introduced, SLOT_VARS.invasive].map(cssVar);
+    palette.labels = ["Not identified to species", "Native to Ontario",
+                      "Native to eastern North America", "Introduced", "Introduced & invasive"];
   } else if (state.colourMode === "dbh") {
     css = [cssVar(SLOT_VARS.unknown), ...SLOT_VARS.seq.map(cssVar)];
     palette.labels = ["No diameter recorded", ...DBH_BREAKS.map((b, i) => (i === 0 ? `< ${b} cm` : `${DBH_BREAKS[i - 1]}–${b} cm`)), `≥ ${DBH_BREAKS[DBH_BREAKS.length - 1]} cm`];
@@ -709,6 +717,7 @@ const CHIP_GROUPS = [
     key: "origin", label: "Origin",
     options: [
       { value: "native", label: "Native to Ontario", on: true, swatch: "var(--series-native)" },
+      { value: "native_eastern_na", label: "Native to eastern N. America", on: true, swatch: "var(--series-native-ena)" },
       { value: "non_native", label: "Introduced", on: true, swatch: "var(--series-introduced)" },
       { value: "invasive", label: "Invasive", on: true, swatch: "var(--series-invasive)" },
       { value: "unknown", label: "Not identified to species", on: true, swatch: "var(--series-unknown)" },
@@ -1095,10 +1104,12 @@ function popupContent(i) {
 
   const originLabel = t.invasive ? "Introduced & invasive"
     : t.native === "native" ? "Native to Ontario"
+    : t.native === "native_eastern_na" ? "Native to eastern North America"
     : t.native === "non_native" ? "Introduced"
     : "Not identified to species";
   const originVar = t.invasive ? "--series-invasive"
     : t.native === "native" ? "--series-native"
+    : t.native === "native_eastern_na" ? "--series-native-ena"
     : t.native === "non_native" ? "--series-introduced"
     : "--series-unknown";
 
@@ -1221,9 +1232,12 @@ function renderLegend() {
     return;
   }
 
+  // Class counts, not status counts: invasive wins the colour, so these are what the
+  // chips actually filter. Order matches the palette's slots.
   const counts = mode === "origin"
-    ? [meta.summary.unknown_count, meta.summary.native_count,
-       meta.summary.non_native_count - meta.summary.invasive_count, meta.summary.invasive_count]
+    ? [meta.summary.class_unknown, meta.summary.class_native,
+       meta.summary.class_native_eastern_na, meta.summary.class_introduced,
+       meta.summary.class_invasive]
     : null;
   const rows = palette.labels.map((label, i) => {
     if (!label) return "";
@@ -1270,6 +1284,7 @@ function renderTaxaTable() {
     .map(({ count, row }) => {
       const colour = row.invasive ? cssVar("--series-invasive")
         : row.native === "native" ? cssVar("--series-native")
+        : row.native === "native_eastern_na" ? cssVar("--series-native-ena")
         : row.native === "non_native" ? cssVar("--series-introduced")
         : cssVar("--series-unknown");
       const share = total ? ((count / total) * 100).toFixed(1) + "%" : "–";
@@ -1441,17 +1456,124 @@ function setupMapInteraction() {
   map.on("moveend zoomend", writeHash);
 }
 
+/* Mobile bottom sheet, ported from to-multiplex-map.
+ *
+ * Draggable via pointer events (mouse + touch in one API). Three snap states --
+ * minimized (just the handle), collapsed (the default peek), expanded (full filter
+ * access) -- so dragging down from the default has somewhere smaller to land instead of
+ * springing back. No-op on desktop, where the panel is a plain sidebar.
+ *
+ * Taps use a native "click" listener rather than measuring pointer movement: browsers
+ * already suppress click after a real drag, which is a far more reliable tap/drag
+ * distinction on touch hardware than a hand-rolled pixel threshold.
+ *
+ * The heights come from window.innerHeight, not CSS vh: on mobile browsers vh is pinned
+ * to the LARGEST viewport (as if the address bar were hidden), so a vh-sized sheet
+ * overflows the real viewport whenever the address bar is showing.
+ */
+const PANEL_MINIMIZED_PX = 56;
+const PANEL_COLLAPSED_VH = 0.42;
+const PANEL_EXPANDED_VH = 0.82;
+const DRAG_MOVE_THRESHOLD = 6;
+
 function setupPanel() {
   const panel = el("panel");
-  panel.dataset.open = "false";
-  el("panel-toggle").addEventListener("click", () => {
-    const open = panel.dataset.open === "true";
-    panel.dataset.open = String(!open);
-    el("panel-toggle").setAttribute("aria-expanded", String(!open));
+  const toggle = el("panel-toggle");
+  const hideBtn = el("panel-hide");
+  const isMobile = () => window.matchMedia("(max-width: 860px)").matches;
+
+  function targetHeight(state) {
+    const vh = window.innerHeight;
+    if (state === "minimized") return PANEL_MINIMIZED_PX;
+    if (state === "expanded") return vh * PANEL_EXPANDED_VH;
+    return vh * PANEL_COLLAPSED_VH;
+  }
+
+  function setState(state) {
+    panel.dataset.state = state;
+    toggle.setAttribute("aria-expanded", String(state === "expanded"));
+    // Desktop's sidebar is full-height CSS, not state-driven -- an inline max-height
+    // would clamp it regardless of viewport width (inline styles aren't scoped by media
+    // query), so only touch it on mobile.
+    if (isMobile() && !panel.classList.contains("dragging")) {
+      panel.style.maxHeight = `${targetHeight(state)}px`;
+    } else if (!isMobile()) {
+      panel.style.maxHeight = "";
+    }
+    if (map) {
+      map.invalidateSize();
+      if (treeLayer) treeLayer.draw();
+    }
+  }
+
+  setState("collapsed");
+  window.addEventListener("resize", () => {
+    if (!panel.classList.contains("dragging")) setState(panel.dataset.state);
   });
-  el("panel-hide").addEventListener("click", () => {
-    panel.dataset.open = "false";
-    el("panel-toggle").setAttribute("aria-expanded", "false");
+  hideBtn.addEventListener("click", () => setState("minimized"));
+
+  let dragging = false;
+  let startY = 0;
+  let startHeight = 0;
+  let moved = false;
+  let lastHeight = 0;
+  // Touch input suppresses the click that would otherwise follow a drag; a mouse does
+  // not, so a drag with one (a narrow desktop window) would snap the sheet and then
+  // immediately toggle it back. Swallow exactly one click after a real drag.
+  let swallowClick = false;
+
+  toggle.addEventListener("pointerdown", (e) => {
+    if (!isMobile()) return;
+    dragging = true;
+    moved = false;
+    startY = e.clientY;
+    startHeight = panel.getBoundingClientRect().height;
+    lastHeight = startHeight;
+    panel.classList.add("dragging");
+    panel.style.maxHeight = "none";
+    try {
+      toggle.setPointerCapture(e.pointerId);
+    } catch (err) {
+      // Non-fatal: pointer capture keeps tracking if the finger slides off the handle,
+      // but the drag math below works without it.
+    }
+  });
+
+  toggle.addEventListener("pointermove", (e) => {
+    if (!dragging) return;
+    const deltaY = startY - e.clientY;
+    if (Math.abs(deltaY) > DRAG_MOVE_THRESHOLD) moved = true;
+    const vh = window.innerHeight;
+    // Capped just above the expanded target so an enthusiastic drag can't overshoot into
+    // something that reads as "fullscreen with no escape".
+    const maxHeight = vh * PANEL_EXPANDED_VH + 24;
+    lastHeight = Math.min(maxHeight, Math.max(PANEL_MINIMIZED_PX, startHeight + deltaY));
+    panel.style.height = `${lastHeight}px`;
+  });
+
+  function endDrag() {
+    if (!dragging) return;
+    dragging = false;
+    panel.classList.remove("dragging");
+    panel.style.height = "";
+    panel.style.maxHeight = "";
+    if (!moved) return; // plain tap: the click listener below handles it
+    swallowClick = true;
+
+    const vh = window.innerHeight;
+    const collapsedPx = vh * PANEL_COLLAPSED_VH;
+    const expandedPx = vh * PANEL_EXPANDED_VH;
+    if (lastHeight < (PANEL_MINIMIZED_PX + collapsedPx) / 2) setState("minimized");
+    else if (lastHeight < (collapsedPx + expandedPx) / 2) setState("collapsed");
+    else setState("expanded");
+  }
+
+  toggle.addEventListener("pointerup", endDrag);
+  toggle.addEventListener("pointercancel", endDrag);
+  toggle.addEventListener("click", () => {
+    if (swallowClick) { swallowClick = false; return; }
+    if (!isMobile()) return;
+    setState(panel.dataset.state === "expanded" ? "collapsed" : "expanded");
   });
 
   // Follow the OS theme: the palette lives in CSS, so re-read it and redraw.

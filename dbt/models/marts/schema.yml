@@ -13,7 +13,7 @@ models:
         tests:
           - not_null
           - accepted_values:
-              values: ['native', 'non_native', 'unknown']
+              values: ['native', 'native_eastern_na', 'non_native', 'unknown']
       - name: status_basis
         description: Whether native status came from a species-level or genus-level rule.
         tests:
