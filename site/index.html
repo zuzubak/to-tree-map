@@ -1,0 +1,157 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Toronto Street Tree Map</title>
+  <meta name="description" content="Every one of Toronto's ~690,000 inventoried street trees, coloured by whether it's native to Ontario, by trunk size, or by species.">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+<script src="/header.js"></script>
+  <div class="app">
+    <main id="map-pane">
+      <div id="map"></div>
+      <div class="map-badge" id="loading-badge">
+        <span class="spinner" aria-hidden="true"></span>
+        <span id="loading-text">Loading 690,000 trees&hellip;</span>
+      </div>
+    </main>
+
+    <aside class="panel" id="panel">
+      <div class="panel-handle-row">
+        <button class="panel-drag-handle" id="panel-toggle" aria-label="Toggle filter panel" aria-expanded="false">
+          <span class="handle-bar"></span>
+          <span class="handle-label">Stats &amp; filters</span>
+        </button>
+        <button class="panel-hide-btn" id="panel-hide" aria-label="Hide panel and show map">
+          Hide &#9660;
+        </button>
+      </div>
+
+      <div class="panel-scroll">
+        <header class="panel-header">
+          <h1>Toronto Street Tree Map</h1>
+          <span class="subtitle" id="last-updated">Loading&hellip;</span>
+          <div class="stats" id="stats"></div>
+        </header>
+
+        <!-- Selected tree. Hidden until something is clicked. -->
+        <section class="tree-card" id="tree-card" hidden>
+          <button class="tree-card-close" id="tree-card-close" aria-label="Close tree details">&times;</button>
+          <div id="tree-card-body"></div>
+        </section>
+
+        <div class="filter-bar">
+          <div class="filter-group">
+            <span class="filter-group-label">Colour by</span>
+            <div class="seg" id="colour-mode" role="radiogroup" aria-label="Colour trees by">
+              <button class="seg-btn" data-mode="origin" role="radio" aria-checked="true">Native or not</button>
+              <button class="seg-btn" data-mode="compare" role="radio" aria-checked="false">Compare species</button>
+              <button class="seg-btn" data-mode="dbh" role="radio" aria-checked="false">Trunk size</button>
+              <button class="seg-btn" data-mode="genus" role="radio" aria-checked="false">Genus</button>
+            </div>
+          </div>
+
+          <!-- Legend + the controls specific to the active colour mode. -->
+          <div class="legend" id="legend"></div>
+
+          <div class="filter-group" id="origin-filter">
+            <span class="filter-group-label">Origin</span>
+            <button class="filter-chip" data-active="true" data-group="origin" data-value="native">
+              <span class="swatch" data-swatch="native"></span>Native to Ontario
+            </button>
+            <button class="filter-chip" data-active="true" data-group="origin" data-value="non_native">
+              <span class="swatch" data-swatch="non_native"></span>Introduced
+            </button>
+            <button class="filter-chip" data-active="true" data-group="origin" data-value="invasive">
+              <span class="swatch" data-swatch="invasive"></span>Invasive
+            </button>
+            <button class="filter-chip" data-active="true" data-group="origin" data-value="unknown">
+              <span class="swatch" data-swatch="unknown"></span>Not identified to species
+            </button>
+          </div>
+
+          <div class="filter-group taxon-filter">
+            <div class="filter-group-label-row">
+              <span class="filter-group-label">Species &amp; genus</span>
+              <button class="link-btn" id="taxon-clear" hidden>Clear</button>
+            </div>
+            <div class="seg seg-sm" id="taxon-level" role="radiogroup" aria-label="Group by">
+              <button class="seg-btn" data-level="genus" role="radio" aria-checked="true">Genus</button>
+              <button class="seg-btn" data-level="species" role="radio" aria-checked="false">Species</button>
+            </div>
+            <input type="search" id="taxon-search" class="text-input" placeholder="Search maple, oak, Quercus&hellip;"
+                   autocomplete="off" aria-label="Search species or genus">
+            <div class="taxon-list" id="taxon-list" role="listbox" aria-label="Species and genus list"></div>
+          </div>
+
+          <div class="date-filter">
+            <div class="filter-group-label-row">
+              <span class="filter-group-label">Trunk diameter</span>
+              <span class="filter-group-note" id="dbh-readout"></span>
+            </div>
+            <div class="histogram" id="histogram" aria-hidden="true"></div>
+            <div class="range-slider" id="range-slider">
+              <div class="range-track"></div>
+              <div class="range-fill" id="range-fill"></div>
+              <input type="range" id="range-min" class="range-input" aria-label="Minimum trunk diameter">
+              <input type="range" id="range-max" class="range-input" aria-label="Maximum trunk diameter">
+            </div>
+            <div class="range-labels">
+              <span id="range-label-min"></span>
+              <span id="range-label-max"></span>
+            </div>
+            <label class="checkbox-row">
+              <input type="checkbox" id="dbh-include-unknown" checked>
+              <span>Include the <span id="dbh-unknown-count">0</span> trees with no diameter recorded</span>
+            </label>
+          </div>
+
+          <div class="filter-group">
+            <div class="filter-group-label-row">
+              <span class="filter-group-label">Ward</span>
+              <button class="link-btn" id="ward-clear" hidden>Clear</button>
+            </div>
+            <select id="ward-select" class="text-input" aria-label="Filter by ward">
+              <option value="">All 25 wards</option>
+            </select>
+            <div class="ward-stats" id="ward-stats"></div>
+          </div>
+
+          <div class="filter-group">
+            <label class="checkbox-row">
+              <input type="checkbox" id="layer-wards">
+              <span>Show ward boundaries</span>
+            </label>
+          </div>
+        </div>
+
+        <!-- The table view: the accessibility relief for colour-coded marks, and useful
+             on its own for "what actually grows here". -->
+        <section class="legend">
+          <h2>Most common trees <span class="muted" id="table-scope">citywide</span></h2>
+          <div class="taxa-table" id="taxa-table"></div>
+          <p class="legend-note" id="methodology">
+            Trunk diameter (DBH) is measured at breast height in centimetres.
+            Native status is resolved per species against a
+            <a href="https://github.com/zuzubak/to-tree-map/blob/master/dbt/seeds/native_status.csv">curated list</a>
+            of Ontario-native trees; a tree the City recorded only to genus stays
+            &ldquo;not identified to species&rdquo; rather than being guessed at.
+            Positions come from the City's inventory, which geocodes each tree to its
+            street address &mdash; so dots sit on the parcel, not on the exact trunk.
+          </p>
+        </section>
+      </div>
+    </aside>
+  </div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="map.js"></script>
+
+  <!-- Pageview counts only (GoatCounter): no cookies, so no consent banner needed. -->
+  <script data-goatcounter="https://zuzubak.goatcounter.com/count"
+          async src="//gc.zgo.at/count.js"></script>
+</body>
+</html>

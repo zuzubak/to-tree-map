@@ -1,0 +1,42 @@
+version: 2
+
+models:
+  - name: dim_taxa
+    description: One row per distinct taxon, with curated Ontario native status and a stable id.
+    columns:
+      - name: taxon_id
+        description: Stable small integer written into the map's binary payload.
+        tests: [unique, not_null]
+      - name: botanical_display
+        tests: [unique, not_null]
+      - name: native_status
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['native', 'non_native', 'unknown']
+      - name: status_basis
+        description: Whether native status came from a species-level or genus-level rule.
+        tests:
+          - accepted_values:
+              values: ['species', 'genus', 'unmatched']
+
+  - name: street_trees
+    description: One row per tree, joined to taxon and ward, spatially ordered for compression.
+    columns:
+      - name: object_id
+        tests: [unique, not_null]
+      - name: taxon_id
+        tests:
+          - not_null
+          - relationships:
+              to: ref('dim_taxa')
+              field: taxon_id
+      - name: lon
+        tests: [not_null]
+      - name: lat
+        tests: [not_null]
+
+  - name: tree_stats_by_ward
+    columns:
+      - name: ward
+        tests: [unique, not_null]

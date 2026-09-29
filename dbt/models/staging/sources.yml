@@ -1,0 +1,13 @@
+version: 2
+
+sources:
+  - name: raw
+    schema: raw
+    description: Tables loaded by ingest/ straight from the City of Toronto's CKAN API.
+    tables:
+      - name: street_trees
+        description: One row per inventoried street tree, geometry already unpacked to lon/lat.
+      - name: wards
+        description: Ward code and name, for labelling.
+      - name: source_metadata
+        description: The City's own last_refreshed stamp plus which ingest route was used.

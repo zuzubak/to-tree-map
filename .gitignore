@@ -1,0 +1,20 @@
+.venv/
+__pycache__/
+*.pyc
+.DS_Store
+
+# Warehouse and generated map payloads: both are rebuilt from the City's API by
+# `.github/workflows/refresh.yml`, which deploys site/ straight to Pages as an
+# artifact. Keeping the ~700k-row DuckDB file and the ~9 MB of binary tree
+# columns out of git means the history stays small instead of gaining a new
+# copy of both on every refresh.
+data/*.duckdb
+data/*.duckdb.wal
+data/*.csv
+site/data/
+
+dbt/target/
+dbt/dbt_packages/
+dbt/logs/
+logs/
+dbt/.user.yml

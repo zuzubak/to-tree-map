@@ -1,0 +1,33 @@
+name: 'to_tree_map'
+version: '1.0.0'
+config-version: 2
+
+profile: 'to_tree_map'
+
+model-paths: ["models"]
+seed-paths: ["seeds"]
+
+models:
+  to_tree_map:
+    +materialized: table
+
+seeds:
+  to_tree_map:
+    +quote_columns: false
+    native_status:
+      +column_types:
+        taxon: varchar
+        rank: varchar
+        native_status: varchar
+        invasive: boolean
+        origin: varchar
+        notes: varchar
+    genus_labels:
+      +column_types:
+        genus: varchar
+        genus_common: varchar
+    name_corrections:
+      +column_types:
+        raw_lower: varchar
+        canonical_name: varchar
+        reason: varchar

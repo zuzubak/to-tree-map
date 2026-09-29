@@ -1,0 +1,66 @@
+name: Refresh street tree data
+
+on:
+  schedule:
+    # 06:00-07:00 America/Toronto, Mondays. The City refreshes this dataset "as available"
+    # (it has gone months between updates), so a daily run would almost always be a no-op.
+    - cron: "0 11 * * 1"
+  workflow_dispatch: {}
+  push:
+    branches: [master]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: refresh-and-deploy
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Fetch street tree inventory
+        run: python ingest/fetch_trees.py
+
+      - name: Fetch ward boundaries
+        run: python ingest/fetch_reference.py
+
+      - name: dbt build
+        working-directory: dbt
+        run: dbt build --profiles-dir .
+
+      - name: Export the map payload
+        run: python export/export_map_data.py
+
+      - name: Check the payload is complete
+        run: python export/check_payload.py
+
+      - uses: actions/configure-pages@v5
+
+      # site/data is built here rather than committed: the payload is ~6 MB of binary
+      # columns, and committing it on every refresh would grow the repo by that much each
+      # time. Pages serves the artifact, so nothing needs to be in git.
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+      - id: deployment
+        uses: actions/deploy-pages@v4
