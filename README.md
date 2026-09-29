@@ -215,8 +215,11 @@ cd site && python -m http.server 8000
 # open http://localhost:8000
 ```
 
-`/header.js` 404s locally — it's the shared site header served from the root of
-malcolmkennedy.com. The map is built to work without it.
+`/header.js` and `config.js` both 404 locally — the first is the shared site header served
+from the root of malcolmkennedy.com, the second is the basemap key written at deploy time.
+The map is built to work without either: with no key it falls back to Esri's keyless grey
+canvas instead of CARTO, so there's nothing to set up. To develop against the real basemap,
+`cp site/config.example.js site/config.js` and paste a key in.
 
 ## Deploying
 
@@ -225,3 +228,13 @@ Actions** and either wait for the weekly run or trigger it from the Actions tab.
 user Pages site on a custom domain, this repo is served at
 `malcolmkennedy.com/to-tree-map`, which is also what makes the root-relative `/header.js`
 resolve.
+
+Set a `CARTO_API_KEY` repo secret for the basemap. CARTO now answers unauthenticated tile
+requests with an "API KEY REQUIRED" watermark image — HTTP 200 and a normal-looking PNG, so
+it fails silently — and the keyed endpoint is a different shape: under `rastertiles/`, with
+`?key=`, and no `{s}` subdomain. The workflow writes the key into `site/config.js`, which is
+gitignored. Without the secret the build still succeeds and falls back to Esri.
+
+The key isn't really secret — the browser sends it on every tile request, so it's public
+either way. Keeping it out of the repo is hygiene; restricting it by domain in the CARTO
+dashboard is the actual control.
