@@ -4,4 +4,10 @@ to_tree_map:
     dev:
       type: duckdb
       path: '../data/warehouse.duckdb'
-      threads: 4
+      # Single-threaded on purpose. duckdb 1.1.3's Python client intermittently aborts the
+      # whole process under dbt's worker threads -- "Fatal Python error: PyEval_SaveThread:
+      # the function must be called with the GIL held" -- which failed roughly one CI run in
+      # four. The build is a handful of small models and takes about four seconds either
+      # way, so there is nothing to win by racing. (to-multiplex-map omits `threads`
+      # entirely, which means the same thing.)
+      threads: 1
