@@ -43,7 +43,11 @@ statused as (
         coalesce(sp.native_status, gn.native_status, 'unknown') as native_status,
         coalesce(sp.invasive, gn.invasive, false) as invasive,
         coalesce(sp.origin, gn.origin) as origin,
-        coalesce(sp.notes, gn.notes) as native_notes,
+        -- Genus notes explain why a genus is ambiguous, which is only worth saying to
+        -- someone looking at a genus-only record. Inherited onto an identified species it
+        -- is just wrong: a silver maple would carry "Ontario has five native maples;
+        -- Norway maple is the most-planted exotic", which is about neither.
+        case when sp.taxon is not null then sp.notes else gn.notes end as native_notes,
         case when sp.taxon is not null then 'species' else
              case when gn.taxon is not null then 'genus' else 'unmatched' end
         end as status_basis,
