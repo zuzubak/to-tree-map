@@ -894,7 +894,23 @@ html, body {
 .popup-badge .swatch,
 .taxon-row .swatch { box-shadow: 0 0 0 1px var(--border); }
 
-.popup-figure { margin: 6px 0 2px; }
-.popup-figure-bar { height: 5px; background: var(--gridline); border-radius: 3px; overflow: hidden; }
-.popup-figure-fill { height: 100%; background: var(--seq-3); border-radius: 3px; }
-.popup-figure-label { font-size: 11px; color: var(--text-muted); margin-top: 3px; }
+.popup-figure { position: relative; margin: 6px 0 2px; }
+/* Diverging from the centre, which is the median for this species: left of centre is
+   smaller than typical, right is bigger. One hue in both directions -- the distance is
+   magnitude, not polarity, and neither end is good or bad. */
+.popup-figure-bar {
+  position: relative;
+  height: 5px;
+  background: var(--gridline);
+  border-radius: 3px;
+  overflow: hidden;
+}
+.popup-figure-fill { position: absolute; top: 0; height: 100%; background: var(--seq-3); }
+/* Sits outside .popup-figure-bar, which clips its children to hold the fill's rounded
+   ends -- inside it, the tick was cropped to invisibility. */
+.popup-figure-tick {
+  position: absolute; top: -2px; left: 50%;
+  width: 1px; height: 9px; margin-left: -0.5px;
+  background: var(--text-secondary);
+}
+.popup-figure-label { font-size: 11px; color: var(--text-muted); margin-top: 4px; }

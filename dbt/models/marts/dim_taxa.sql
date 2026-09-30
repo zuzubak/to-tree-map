@@ -14,6 +14,26 @@ with trees as (
     select * from {{ ref('stg_street_trees') }}
 ),
 
+-- What a tree of this kind normally measures, for the popup's size comparison.
+--
+-- Median, not max: the top of the diameter range is not trustworthy. Values heap on
+-- round numbers (2,267 of the 100cm+ readings end in 0, against ~640 if they were
+-- measured rather than estimated), and the tail holds botanical impossibilities -- three
+-- identical 203 cm yews at one address, a 268 cm Colorado blue spruce. A max is exactly
+-- the statistic those records capture; a median ignores them.
+--
+-- Grouped at species level rather than per taxon, so a 'Skyline' honey locust is compared
+-- against all honey locusts instead of only against other Skylines.
+peer as (
+    select
+        case when species is not null then genus || ' ' || species else genus end as peer_key,
+        median(dbh_cm) as peer_median_dbh_cm,
+        count(dbh_cm) as peer_count
+    from trees
+    where genus is not null
+    group by 1
+),
+
 taxa as (
     select
         botanical_display,
@@ -92,6 +112,10 @@ select
     tree_count,
     trees_with_dbh,
     mean_dbh_cm,
-    max_dbh_cm
-from labelled
+    max_dbh_cm,
+    p.peer_median_dbh_cm,
+    p.peer_count
+from labelled l
+left join peer p
+    on p.peer_key = case when l.species is not null then l.genus || ' ' || l.species else l.genus end
 order by botanical_display

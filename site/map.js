@@ -1144,16 +1144,36 @@ function popupContent(i) {
   badge.append(sw, document.createTextNode(originLabel));
   wrap.appendChild(badge);
 
-  // A trunk-size figure reads faster than the number alone: this trunk against the
-  // thickest recorded for the same species.
-  if (dbh && t.max_dbh) {
+  // A trunk-size figure reads faster than the number alone: this trunk against a typical
+  // one of its kind. The bar diverges from the median at the centre -- left of centre is
+  // smaller than typical, right of centre is bigger -- with 2x or more filling the bar.
+  //
+  // Needs a real peer group to mean anything, so it's skipped below 30 measured trees.
+  const median = t.median_dbh;
+  if (dbh && median && t.peer_n >= 30) {
+    const ratio = dbh / median;
+    const pos = Math.max(0, Math.min(100, ratio * 50));
+    const left = Math.min(50, pos);
+    const width = Math.abs(pos - 50);
+    const pct = Math.round(Math.abs(ratio - 1) * 100);
+
+    // The popup is already headed with the species, so the label doesn't repeat it --
+    // spelling it out here pushed the line into a second row.
+    let verdict;
+    if (Math.abs(ratio - 1) <= 0.05) verdict = "about typical";
+    else if (ratio >= 1.5) verdict = `${ratio.toFixed(1)}\u00d7 typical`;
+    else verdict = `${pct}% ${ratio > 1 ? "over" : "under"} typical`;
+
     const fig = document.createElement("div");
     fig.className = "popup-figure";
     fig.innerHTML =
-      '<div class="popup-figure-bar"><div class="popup-figure-fill" style="width:' +
-      Math.min(100, (dbh / t.max_dbh) * 100).toFixed(1) + '%"></div></div>' +
-      '<div class="popup-figure-label">' + dbh + ' cm &middot; thickest in the inventory is ' +
-      t.max_dbh + ' cm</div>';
+      '<div class="popup-figure-bar">' +
+        '<div class="popup-figure-fill" style="left:' + left.toFixed(1) +
+          '%;width:' + width.toFixed(1) + '%"></div>' +
+      '</div>' +
+      '<div class="popup-figure-tick"></div>' +
+      '<div class="popup-figure-label">' + dbh + ' cm &middot; ' + verdict +
+        ' (' + median + ' cm)</div>';
     wrap.appendChild(fig);
   }
 
@@ -1171,7 +1191,6 @@ function popupContent(i) {
     ["Ward", ward ? `${ward.ward_name} (${ward.ward})` : null],
     ["Trunk diameter", dbh ? `${dbh} cm` : "Not recorded"],
     ["Origin", t.origin || null],
-    ["Typical for species", t.mean_dbh ? `${t.mean_dbh} cm mean trunk` : null],
     ["Trees of this kind", `${fmt.format(t.count)} citywide`],
     ["Record", t.basis === "genus" ? "Identified to genus only" : null],
   ];

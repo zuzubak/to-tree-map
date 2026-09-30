@@ -139,7 +139,7 @@ def main() -> None:
         """
         select taxon_id, botanical_display, common_name, genus, genus_common, species,
                cultivar, native_status, invasive, origin, native_notes, status_basis,
-               tree_count, mean_dbh_cm, max_dbh_cm
+               tree_count, peer_median_dbh_cm, peer_count
         from dim_taxa order by taxon_id
         """
     ).fetchall()
@@ -213,8 +213,11 @@ def main() -> None:
                 "genus_label": r[4], "species": r[5], "cultivar": r[6],
                 "native": r[7], "invasive": bool(r[8]), "origin": r[9],
                 "notes": r[10], "basis": r[11], "count": int(r[12]),
-                "mean_dbh": float(r[13]) if r[13] is not None else None,
-                "max_dbh": int(r[14]) if r[14] is not None else None,
+                # What a tree of this kind normally measures. Median, not max: the top of
+                # the diameter range is estimated rather than measured and holds outright
+                # impossibilities, which is precisely what a max picks up.
+                "median_dbh": float(r[13]) if r[13] is not None else None,
+                "peer_n": int(r[14]) if r[14] is not None else 0,
             }
             for r in taxa_rows
         ],
