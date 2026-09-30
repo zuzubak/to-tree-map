@@ -90,7 +90,13 @@ Three things worth knowing about how it's applied:
   western red cedar and Nootka cypress stay introduced — native to Canada, but to the other
   side of the continent, and no part of this forest.
 - **Invasive is tracked separately from introduced**, because most introduced street trees
-  are harmless and a few are not. 15 taxa are flagged, covering 136,410 trees.
+  are harmless and a few are not. 15 taxa are flagged, covering 136,410 trees. The flag
+  means *ecologically* invasive — it follows the Ontario Invasive Plant Council's species
+  list, not any statute. Legal status is a different thing and is only stated in a note
+  where it has been checked against the regulation: of the 15, only tree-of-heaven is
+  actually listed under Ontario's Invasive Species Act (Restricted, since January 2024).
+  Norway maple is not listed under the Act, despite being the worst offender here by
+  volume — the OIPC's own best-practice document says so.
 - **Contested cases are labelled, not hidden.** Honey locust (59,904 trees, the third most
   common) is the significant one: sometimes reported as native to extreme southwestern
   Ontario, treated here as introduced, with the reasoning in its `notes` column. It moves the

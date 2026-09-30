@@ -11,20 +11,20 @@ Acer negundo,species,native,false,Ontario,
 Acer nigrum,species,native,false,Ontario,
 Acer palmatum,species,non_native,false,Japan and Korea,
 Acer pensylvanicum,species,native,false,Ontario,
-Acer platanoides,species,non_native,true,Europe,"Restricted-invasive in Ontario; shades out native understorey, and is the most common street tree in the city"
+Acer platanoides,species,non_native,true,Europe,"Invasive in Ontario woodlands: shades out native understorey and regenerates densely in ravines, and it is the most common street tree in the city"
 Acer pseudoplatanus,species,non_native,false,Europe,Locally naturalising in southern Ontario
 Acer rubrum,species,native,false,Ontario,
 Acer saccharinum,species,native,false,Ontario,
 Acer saccharum,species,native,false,Ontario,
 Acer spicatum,species,native,false,Ontario,
-Acer tataricum,species,non_native,true,Eurasia,"Includes Amur maple (subsp. ginnala), listed as invasive in Ontario"
+Acer tataricum,species,non_native,true,Eurasia,"Includes Amur maple (subsp. ginnala), which spreads readily into open woodland and ravine edges"
 Acer truncatum,species,non_native,false,China,
 Acer x freemanii,species,native,false,Ontario,A nursery hybrid of two Ontario natives (A. rubrum x A. saccharinum); the cross also occurs in the wild
 Aesculus flava,species,native_eastern_na,false,Eastern United States,An Appalachian species; reaches Canada only as a planting
 Aesculus glabra,species,native,false,Ontario,Reaches its northern limit in extreme southwestern Ontario
 Aesculus hippocastanum,species,non_native,false,Balkans,
 Aesculus x carnea,species,non_native,false,Garden hybrid,Garden hybrid of A. hippocastanum and A. pavia; both parents exotic
-Ailanthus altissima,species,non_native,true,China,Restricted-invasive in Ontario
+Ailanthus altissima,species,non_native,true,China,Restricted under Ontario's Invasive Species Act since 2024; the main host plant for spotted lanternfly
 Alnus,genus,unknown,false,mixed,Speckled and green alder are native; European black alder is planted and invasive
 Alnus glutinosa,species,non_native,true,Europe,Invades wet ground
 Amelanchier canadensis,species,native,false,Ontario,
@@ -69,7 +69,7 @@ Crataegus,genus,unknown,false,mixed,Ontario has many native hawthorns; European 
 Crataegus crus-galli,species,native,false,Ontario,
 Crataegus laevigata,species,non_native,false,Europe,
 Crataegus viridis,species,native_eastern_na,false,Southeastern United States,
-Elaeagnus angustifolia,species,non_native,true,Eurasia,Restricted-invasive in Ontario
+Elaeagnus angustifolia,species,non_native,true,Eurasia,"Invades riverbanks and open ground, fixing nitrogen and crowding out native vegetation"
 Euonymus alatus,species,non_native,true,East Asia,Invasive in woodlands
 Fagus,genus,unknown,false,mixed,American beech is native; European beech is a common street planting
 Fagus grandifolia,species,native,false,Ontario,Threatened by beech bark disease
