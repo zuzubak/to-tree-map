@@ -202,7 +202,6 @@ const state = {
   dbhMin: 0,
   dbhMax: 200,
   dbhIncludeUnknown: true,
-  wards: new Set(),   // every ward code, populated once the metadata lands
   selectedTree: -1,
 };
 
@@ -320,10 +319,6 @@ function recomputeVisible() {
     state.origin.has("invasive"),
   ];
   const { dbhMin, dbhMax, dbhIncludeUnknown } = state;
-  const wards = state.wards;
-  // A tree the City left without a ward survives only while every ward is ticked, so
-  // "all wards" still means everything and narrowing never silently includes strays.
-  const allWards = wards.size === meta.wards.length;
 
   // Turn the selected genus/species names into a fast per-taxon lookup.
   let taxonAllowed = null;
@@ -355,8 +350,6 @@ function recomputeVisible() {
     if (d === 0) {
       if (!dbhIncludeUnknown) continue;
     } else if (d < dbhMin || d > dbhMax) continue;
-    const w = ward[i];
-    if (w === 0 ? !allWards : !wards.has(w)) continue;
     visible[i] = 1;
     count++;
     classCounts[originClass[t]]++;
@@ -802,7 +795,6 @@ function renderFilterBar() {
 
   renderTaxonPicker(bar);
   renderDbhFilter(bar);
-  renderWardFilter(bar);
 
   const layers = document.createElement("div");
   layers.className = "filter-group";
@@ -1044,61 +1036,6 @@ function renderDbhControls() {
   });
 }
 
-/* ---- wards ---- */
-
-function renderWardFilter(container) {
-  const block = document.createElement("div");
-  block.className = "ward-filter";
-  const head = document.createElement("div");
-  head.className = "ward-filter-head";
-  head.innerHTML = '<span class="filter-group-label">Wards</span><span class="ward-actions"></span>';
-  const list = document.createElement("div");
-  list.className = "ward-list";
-  list.setAttribute("role", "group");
-  list.setAttribute("aria-label", "Wards");
-
-  const wards = meta.wards.slice().sort((a, b) => b.tree_count - a.tree_count);
-  for (const w of wards) {
-    const code = parseInt(w.ward, 10);
-    const row = document.createElement("label");
-    row.className = "ward-row";
-    const box = document.createElement("input");
-    box.type = "checkbox";
-    box.checked = state.wards.has(code);
-    const name = document.createElement("span");
-    name.className = "ward-name";
-    name.textContent = w.ward_name;
-    const count = document.createElement("span");
-    count.className = "ward-count";
-    count.textContent = fmt.format(w.tree_count);
-    box.addEventListener("change", () => {
-      if (box.checked) state.wards.add(code);
-      else state.wards.delete(code);
-      applyFilters();
-    });
-    row.append(box, name, count);
-    list.appendChild(row);
-  }
-
-  const actions = head.querySelector(".ward-actions");
-  for (const [text, on] of [["All", true], ["None", false]]) {
-    const btn = document.createElement("button");
-    btn.type = "button";
-    btn.className = "link-btn";
-    btn.textContent = text;
-    btn.addEventListener("click", () => {
-      state.wards.clear();
-      if (on) wards.forEach((w) => state.wards.add(parseInt(w.ward, 10)));
-      list.querySelectorAll("input").forEach((b) => { b.checked = on; });
-      applyFilters();
-    });
-    actions.appendChild(btn);
-  }
-
-  block.append(head, list);
-  container.appendChild(block);
-}
-
 /* ------------------------------------------------------------------ UI: popups --------- */
 
 function streetName(id) {
@@ -1317,12 +1254,6 @@ function renderTaxaTable() {
     .sort((a, b) => b.count - a.count)
     .slice(0, 12);
 
-  const selectedWards = state.wards.size && state.wards.size < meta.wards.length
-    ? meta.wards.filter((w) => state.wards.has(parseInt(w.ward, 10)))
-    : null;
-  el("table-scope").textContent = selectedWards
-    ? (selectedWards.length === 1 ? `in ${selectedWards[0].ward_name}` : `in ${selectedWards.length} wards`)
-    : "citywide";
 
   el("taxa-table").innerHTML = ranked
     .map(({ count, row }) => {
@@ -1693,7 +1624,6 @@ async function main() {
   trees.n = meta.tree_count;
   el("last-updated").textContent =
     `${fmt.format(meta.tree_count)} trees · City inventory updated ${String(meta.city_last_refreshed).slice(0, 10)}`;
-  meta.wards.forEach((w) => state.wards.add(parseInt(w.ward, 10)));
 
   const hash = readHash();
   if (hash && hash.mode) state.colourMode = hash.mode;
@@ -1720,8 +1650,8 @@ async function main() {
     trees._coords = coords;
     trees.taxon = taxon;
     trees.dbh = dbh;
-    // The ward column is tiny and the ward filter is a headline control, so it comes
-    // with the first wave rather than the detail wave.
+    // Only the popup reads this now, but it inflates to 5 KB -- not worth a second
+    // round trip to defer.
     trees.ward = await loadColumn(meta.columns["ward.u8"].file, Uint8Array);
   } catch (err) {
     badge.hidden = true;

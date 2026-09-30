@@ -58,67 +58,10 @@
         <div class="legend" id="map-legend"></div>
 
         <section class="legend">
-          <h2>Most common trees <span id="table-scope" style="font-weight:500;text-transform:none;letter-spacing:0">citywide</span></h2>
+          <h2>Most common trees</h2>
           <div id="taxa-table"></div>
         </section>
 
-        <section class="about">
-          <h2>About this map</h2>
-
-          <p>
-            Every tree in the City of Toronto's street tree inventory &mdash; about
-            688,000 of them &mdash; coloured by whether it is native to Ontario, by
-            trunk size, or by species.
-          </p>
-          <p>
-            <strong>Native or not</strong> is the default, and it has four tiers, not two:
-            native to Ontario, native to eastern North America, introduced, and introduced
-            and invasive. Norway maple alone is 69,474 trees &mdash; a tenth of every street
-            tree in the city, and invasive.
-            <strong>Compare species</strong> picks out up to three at a time.
-            <strong>Trunk size</strong> shades by diameter, which reads as a map of
-            tree age.
-          </p>
-
-          <h3>Where the data comes from</h3>
-          <p>
-            The City's
-            <a href="https://open.toronto.ca/dataset/street-tree-data/">Street Tree Data</a>,
-            refreshed weekly, with
-            <a href="https://open.toronto.ca/dataset/city-wards/">ward boundaries</a>
-            for the overlay. Native status is resolved per species against a
-            <a href="https://github.com/zuzubak/to-tree-map/blob/master/dbt/seeds/native_status.csv">curated list</a>
-            of Ontario-native trees. The code that builds it is
-            <a href="https://github.com/zuzubak/to-tree-map">on GitHub</a>.
-          </p>
-
-          <h3>Caveats worth knowing</h3>
-          <p>
-            This is City-owned trees on the road allowance &mdash; not Toronto's whole
-            canopy. Park interiors, ravines and back yards are absent, which is why the
-            map thins out over the Don Valley and High Park.
-          </p>
-          <p>
-            Positions are geocoded to the street address, not surveyed at the trunk, so
-            a dot sits on the parcel rather than on the tree. Every tree at one address
-            lands on the same point.
-          </p>
-          <p>
-            <strong>Native to eastern North America</strong> is its own tier, not a kind of
-            introduced: a tree whose wild range lies east of roughly the Mississippi, with
-            that line carried north into Canada, but which never reached Ontario. Honey
-            locust and black locust live here &mdash; near-natives that belong to this
-            forest type without belonging to this place. Colorado blue spruce and Douglas
-            fir stay introduced; they are as foreign here as a European import, just from
-            the other side of the continent.
-          </p>
-          <p>
-            A tree the City recorded only to genus stays &ldquo;not identified to
-            species&rdquo; rather than being guessed at &mdash; <em>Acer</em> alone could
-            be a sugar maple or a Norway maple. That is 43,273 trees, reported as their
-            own category instead of being folded into any of the others.
-          </p>
-        </section>
       </div>
     </aside>
   </div>
