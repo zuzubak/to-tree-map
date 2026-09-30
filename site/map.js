@@ -338,6 +338,14 @@ function recomputeVisible() {
     }
   }
 
+  // The headline numbers and the legend counts are tallied here rather than in their own
+  // passes: this loop already touches all ~690k trees and already has the taxon in hand,
+  // so the panel costs nothing beyond what filtering costs anyway.
+  const classCounts = stats.classCounts;
+  classCounts.fill(0);
+  const speciesSeen = new Uint8Array(meta.species.length);
+  let speciesCount = 0;
+
   let count = 0;
   for (let i = 0; i < n; i++) {
     const t = taxon[i];
@@ -351,7 +359,18 @@ function recomputeVisible() {
     if (w === 0 ? !allWards : !wards.has(w)) continue;
     visible[i] = 1;
     count++;
+    classCounts[originClass[t]]++;
+    const si = speciesIdx[t];
+    if (si !== 0xffff && !speciesSeen[si]) {
+      speciesSeen[si] = 1;
+      speciesCount++;
+    }
   }
+
+  stats.speciesCount = speciesCount;
+  // Percentages are of *classified* trees -- the genus-only bucket is excluded rather
+  // than counted as "not native", which would read as a claim the data doesn't support.
+  stats.classified = classCounts[1] + classCounts[2] + classCounts[3] + classCounts[4];
   return count;
 }
 
@@ -738,6 +757,10 @@ let treeLayer = null;
 let wardLayer = null;
 let visibleCount = 0;
 let openPopup = null;
+// Live tallies over whatever passes the filters, refreshed by recomputeVisible().
+// Index matches the origin colour classes: 0 unknown, 1 native, 2 eastern N.A.,
+// 3 introduced, 4 invasive.
+const stats = { classCounts: new Uint32Array(5), classified: 0, speciesCount: 0 };
 
 function chip(label, active, swatch) {
   const b = document.createElement("button");
@@ -1179,12 +1202,14 @@ function popupContent(i) {
 /* ------------------------------------------------------------------ UI: panel ---------- */
 
 function renderStats() {
-  const s = meta.summary;
+  const c = stats.classCounts;
+  const pct = (part) =>
+    stats.classified ? `${((part / stats.classified) * 100).toFixed(1)}%` : "–";
   const tiles = [
-    ["Trees shown", fmtCompact.format(visibleCount)],
-    ["Native to Ontario", `${s.native_pct}%`],
-    ["Species", num(s.species_count)],
-    ["Invasive", fmtCompact.format(s.invasive_count)],
+    ["Trees shown", visibleCount ? fmtCompact.format(visibleCount) : "0"],
+    ["Species", num(stats.speciesCount)],
+    ["Native to Ontario", pct(c[1])],
+    ["Invasive", pct(c[4])],
   ];
   el("stats").innerHTML = tiles
     .map(([label, value]) =>
@@ -1232,12 +1257,12 @@ function renderLegend() {
     return;
   }
 
-  // Class counts, not status counts: invasive wins the colour, so these are what the
-  // chips actually filter. Order matches the palette's slots.
+  // Live class counts, in palette-slot order. These follow the filters for the same
+  // reason the tiles do: filtering to Norway maple and still being told there are
+  // 136.4K invasive trees on screen is just wrong.
   const counts = mode === "origin"
-    ? [meta.summary.class_unknown, meta.summary.class_native,
-       meta.summary.class_native_eastern_na, meta.summary.class_introduced,
-       meta.summary.class_invasive]
+    ? [stats.classCounts[0], stats.classCounts[1], stats.classCounts[2],
+       stats.classCounts[3], stats.classCounts[4]]
     : null;
   const rows = palette.labels.map((label, i) => {
     if (!label) return "";
@@ -1305,6 +1330,10 @@ function applyFilters() {
   // A popup pinned to a tree that no longer passes the filters would be lying.
   if (state.selectedTree >= 0 && !visible[state.selectedTree]) closePopup();
   renderStats();
+  // The legend carries live counts now, so it has to be rebuilt here too -- otherwise it
+  // keeps whatever was true when it was first drawn, which is zero (this runs before the
+  // first filter pass at boot).
+  renderLegend();
   renderTaxaTable();
   if (treeLayer) treeLayer.draw();
   writeHash();
