@@ -1597,8 +1597,6 @@ async function main() {
   }
 
   trees.n = meta.tree_count;
-  el("last-updated").textContent =
-    `${fmt.format(meta.tree_count)} trees · City inventory updated ${String(meta.city_last_refreshed).slice(0, 10)}`;
 
   const hash = readHash();
   if (hash && hash.mode) state.colourMode = hash.mode;
