@@ -733,6 +733,19 @@ html, body {
   border: 0;
 }
 
+/* The colour key renders nothing in origin mode. Without this it still counts as a flex
+   item and contributes the filter bar's gap, leaving a hole under the Colour by chips. */
+.filter-bar > .legend:empty { display: none; }
+
+/* The shared .legend carries a top divider, which was right when the legend was its own
+   block at the foot of the panel. Inline under the Colour by chips it reads as a section
+   break in the middle of one control, so only this instance drops it. */
+.filter-bar > .legend {
+  margin-top: 0;
+  padding-top: 0;
+  border-top: 0;
+}
+
 /* ---- Species / genus picker ----------------------------------------------
    Same row rhythm as the ward list, plus a search box: 73 genera and 190
    species are too many to scan as chips. */
@@ -815,25 +828,6 @@ html, body {
   font-size: 11px; color: var(--text-muted); font-variant-numeric: tabular-nums;
   margin-bottom: 6px;
 }
-
-/* ---- Taxa table: the same data without colour ---------------------------- */
-
-.taxa-row {
-  display: grid;
-  grid-template-columns: 10px 1fr auto auto;
-  align-items: center;
-  gap: 8px;
-  font-size: 12px;
-  padding: 3px 0;
-  border-bottom: 1px solid var(--gridline);
-  color: var(--text-secondary);
-}
-.taxa-row:last-child { border-bottom: 0; }
-.taxa-row .taxa-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.taxa-row .taxa-count, .taxa-row .taxa-share {
-  font-variant-numeric: tabular-nums; font-size: 11px; color: var(--text-muted);
-}
-.taxa-row .taxa-share { min-width: 38px; text-align: right; }
 
 /* ---- Canvas overlay furniture -------------------------------------------- */
 

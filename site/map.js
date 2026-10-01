@@ -791,6 +791,16 @@ function renderFilterBar() {
       wrap.appendChild(b);
     }
     bar.appendChild(wrap);
+
+    // The colour key sits with the control that sets it rather than at the foot of the
+    // panel. It renders nothing for the origin mode, where the chips already carry the
+    // same swatches, labels and counts and a key would only say it twice.
+    if (group.key === "colourMode") {
+      const key = document.createElement("div");
+      key.className = "legend";
+      key.id = "map-legend";
+      bar.appendChild(key);
+    }
   }
 
   renderTaxonPicker(bar);
@@ -1175,7 +1185,13 @@ function renderStats() {
 
 function renderLegend() {
   const box = el("map-legend");
+  if (!box) return;
   const mode = state.colourMode;
+
+  if (mode === "origin") {
+    box.textContent = "";
+    return;
+  }
 
   if (mode === "dbh") {
     const steps = palette.css.slice(1);
@@ -1229,47 +1245,8 @@ function renderLegend() {
       '</div>';
   });
   // The muted/unknown slot reads as a footnote, so it goes last.
-  box.innerHTML = '<h2>Tree points</h2>' + rows.slice(1).join("") + rows[0] +
+  box.innerHTML = rows.slice(1).join("") + rows[0] +
     '<div class="legend-row"><span style="color: var(--text-muted)">Point size &asymp; trunk diameter</span></div>';
-}
-
-function renderTaxaTable() {
-  // Counts respect the active filters, so the table answers "what's here" for the
-  // current view rather than only for the whole city.
-  const level = state.taxonLevel;
-  const { taxon } = trees;
-  const { genusIdx, speciesIdx } = taxonInfo;
-  const source = level === "genus" ? meta.genera : meta.species;
-  const tally = new Float64Array(source.length);
-  let total = 0;
-  for (let i = 0; i < trees.n; i++) {
-    if (!visible[i]) continue;
-    const idx = level === "genus" ? genusIdx[taxon[i]] : speciesIdx[taxon[i]];
-    if (idx === 0xffff) continue;
-    tally[idx]++;
-    total++;
-  }
-  const ranked = Array.from(tally, (count, i) => ({ count, row: source[i] }))
-    .filter((r) => r.count > 0)
-    .sort((a, b) => b.count - a.count)
-    .slice(0, 12);
-
-
-  el("taxa-table").innerHTML = ranked
-    .map(({ count, row }) => {
-      const colour = row.invasive ? cssVar("--series-invasive")
-        : row.native === "native" ? cssVar("--series-native")
-        : row.native === "native_eastern_na" ? cssVar("--series-native-ena")
-        : row.native === "non_native" ? cssVar("--series-introduced")
-        : cssVar("--series-unknown");
-      const share = total ? ((count / total) * 100).toFixed(1) + "%" : "–";
-      return '<div class="taxa-row">' +
-        `<span class="swatch" style="background:${colour}"></span>` +
-        `<span class="taxa-name">${row.label || row.genus || row.key}</span>` +
-        `<span class="taxa-count">${fmt.format(count)}</span>` +
-        `<span class="taxa-share">${share}</span></div>`;
-    })
-    .join("");
 }
 
 /* ------------------------------------------------------------------ orchestration ------ */
@@ -1280,11 +1257,10 @@ function applyFilters() {
   // A popup pinned to a tree that no longer passes the filters would be lying.
   if (state.selectedTree >= 0 && !visible[state.selectedTree]) closePopup();
   renderStats();
-  // The legend carries live counts now, so it has to be rebuilt here too -- otherwise it
-  // keeps whatever was true when it was first drawn, which is zero (this runs before the
-  // first filter pass at boot).
+  // The key carries live counts, so it is rebuilt here too -- otherwise it keeps whatever
+  // was true when it was first drawn, which is zero (this runs before the first filter
+  // pass at boot).
   renderLegend();
-  renderTaxaTable();
   if (treeLayer) treeLayer.draw();
   writeHash();
 }
@@ -1567,7 +1543,6 @@ function setupPanel() {
     rebuildPalette();
     recomputeColours();
     renderLegend();
-    renderTaxaTable();
     renderTaxonList();
     if (treeLayer) treeLayer.draw();
   };
