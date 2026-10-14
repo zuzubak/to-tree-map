@@ -1613,6 +1613,24 @@ async function main() {
   });
   L.control.scale({ imperial: false }).addTo(map);
 
+  // Address search, from the shared widget on the site root. It hands back a point;
+  // dropping a marker is this map's job because the widget stays map-agnostic.
+  if (window.MapSearch) {
+    let found = null;
+    MapSearch.mount({
+      container: "#search",
+      placeholder: "Search an address",
+      onSelect: (r) => {
+        if (found) map.removeLayer(found);
+        found = L.circleMarker([r.lat, r.lon], {
+          radius: 9, color: "#d1495b", weight: 3, fillColor: "#d1495b", fillOpacity: 0.25,
+        }).addTo(map);
+        map.setView([r.lat, r.lon], Math.max(map.getZoom(), 17));
+      },
+      onClear: () => { if (found) { map.removeLayer(found); found = null; } },
+    });
+  }
+
   try {
     badgeText.textContent = "Loading 690,000 trees…";
     const [coords, taxon, dbh] = await Promise.all([

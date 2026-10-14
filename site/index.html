@@ -27,6 +27,7 @@
   <div class="app">
     <main id="map-pane">
       <div id="map"></div>
+      <div id="search" class="map-search"></div>
       <div class="map-badge" id="loading-badge">
         <span class="spinner" aria-hidden="true"></span>
         <span id="loading-text">Loading 690,000 trees&hellip;</span>
@@ -61,6 +62,7 @@
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <!-- Written at deploy time from the CARTO_API_KEY secret; absent locally, which is fine. -->
+  <script src="/map-search.js"></script>
   <script src="config.js"></script>
   <script src="map.js"></script>
 

@@ -903,3 +903,12 @@ html, body {
   background: var(--text-secondary);
 }
 .popup-figure-label { font-size: 11px; color: var(--text-muted); margin-top: 4px; }
+
+/* Address search. Leaflet's zoom control sits top-left and the loading badge is
+   centred, so this goes top-right. Widget and dropdown styling come from the
+   shared /map-search.js. */
+.map-search {
+  position: absolute; z-index: 600;
+  top: 14px; right: 14px; width: 250px; max-width: calc(100% - 28px);
+}
+@media (max-width: 640px) { .map-search { width: auto; left: 14px; } }
