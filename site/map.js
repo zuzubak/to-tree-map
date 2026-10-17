@@ -64,6 +64,13 @@ const MAX_ZOOM = 20;
  * trees that per-circle path work is cheaper than it is noticeable. */
 const CIRCLE_ZOOM = 15;
 
+/* Below this many trees on screen, the pixel path stops being the right tool. Its whole
+ * justification is volume -- at 688k, a 1 px dot is the only thing that doesn't collapse
+ * into a solid mass. Filter down to a few hundred and the same 1 px dot is unfindable
+ * across a city-sized viewport, so sparse views switch to ringed circles regardless of
+ * zoom. */
+const SPARSE_MAX = 25000;
+
 /* Colour slots, read from CSS so light/dark and the palette live in one place. */
 const SLOT_VARS = {
   native: "--series-native",
@@ -525,14 +532,15 @@ const TreeLayer = L.Renderer.extend({
     ctx.clearRect(0, 0, c.width, c.height);
 
     const zoom = this._map.getZoom();
-    if (zoom >= CIRCLE_ZOOM) this._drawCircles();
-    else this._drawPixels();
+    const shown = visibleCount || trees.n;
+    if (zoom >= CIRCLE_ZOOM || shown <= SPARSE_MAX) this._drawCircles(shown);
+    else this._drawPixels(shown);
     this._drawSelection();
   },
 
   /* City-scale path: one 32-bit write per tree into an ImageData buffer. No path API, no
    * per-point function calls, so all 690k points stay well inside a frame. */
-  _drawPixels() {
+  _drawPixels(shown) {
     const ctx = this._ctx;
     const c = this._container;
     if (!this._imageData || this._imageData.width !== c.width || this._imageData.height !== c.height) {
@@ -551,9 +559,14 @@ const TreeLayer = L.Renderer.extend({
     const H = c.height;
     const zoom = this._map.getZoom();
 
-    /* Dot radius in device pixels. One pixel is too faint to read as a dot map on a
-     * retina display, so the block grows a little with zoom. */
-    const block = zoom <= 11 ? Math.round(m) : zoom <= 13 ? Math.round(1.5 * m) : Math.round(2 * m);
+    /* Dot size in device pixels, from zoom and from how much is actually on screen.
+     * Zoom alone was the old rule, which meant a filtered map drew the same 1 px dots as
+     * an unfiltered one: correct at 688k, invisible at 500. Between SPARSE_MAX and the
+     * full inventory the dot grows from 2 px back down to 1 as density rises. */
+    const zoomBase = zoom <= 11 ? 1 : zoom <= 13 ? 1.5 : 2;
+    const lo = Math.log10(SPARSE_MAX), hi = Math.log10(trees.n);
+    const t = Math.max(0, Math.min(1, (hi - Math.log10(Math.max(shown, 10))) / (hi - lo)));
+    const block = Math.max(1, Math.round(Math.max(zoomBase, 1 + t) * m));
 
     for (let gy = gy0; gy <= gy1; gy++) {
       const rowBase = gy * GRID;
@@ -585,7 +598,7 @@ const TreeLayer = L.Renderer.extend({
 
   /* Street-scale path: real circles, radius from trunk diameter, batched one path per
    * colour so the fill count stays at the number of palette slots. */
-  _drawCircles() {
+  _drawCircles(shown) {
     const ctx = this._ctx;
     const m = this._dpr;
     ctx.setTransform(m, 0, 0, m, 0, 0);
@@ -602,7 +615,17 @@ const TreeLayer = L.Renderer.extend({
      * which is roughly life-size. */
     const metresPerPixel = 156543.03392 * Math.cos((TORONTO_CENTER[0] * Math.PI) / 180) / Math.pow(2, zoom);
     const scaleFactor = 0.01 / metresPerPixel; // cm -> px
-    const minR = zoom >= 17 ? 3 : 2.2;
+
+    /* The floor rises as the map empties: a handful of trees spread over the whole city
+     * need to be findable, where thousands in one neighbourhood do not. Trunk diameter
+     * still drives anything larger than the floor. */
+    const sparse = shown <= SPARSE_MAX;
+    let minR = zoom >= 17 ? 3 : 2.2;
+    if (sparse) {
+      const lo = Math.log10(200), hi = Math.log10(SPARSE_MAX);
+      const t = Math.max(0, Math.min(1, (hi - Math.log10(Math.max(shown, 10))) / (hi - lo)));
+      minR = Math.max(minR, 2.4 + t * 3.1);
+    }
 
     const buckets = [];
     for (let s = 0; s < palette.css.length; s++) buckets.push([]);
@@ -636,6 +659,14 @@ const TreeLayer = L.Renderer.extend({
       ctx.globalAlpha = 0.85;
       ctx.fill();
       ctx.globalAlpha = 1;
+      /* A ring in the panel surface colour cuts each dot out of the basemap, so an
+       * isolated tree doesn't disappear into park green or a road casing. Same trick the
+       * permit map uses on its points. Only worth the stroke when dots are scarce. */
+      if (sparse) {
+        ctx.strokeStyle = cssVar("--surface-1");
+        ctx.lineWidth = 1.4;
+        ctx.stroke();
+      }
     }
     this._circleScale = { scaleFactor, minR };
   },
