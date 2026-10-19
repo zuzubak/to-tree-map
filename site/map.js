@@ -54,9 +54,6 @@ function basemapSource(dark) {
 }
 
 const TORONTO_CENTER = [43.7, -79.38];
-/* Degrees of slack around the inventory's own extent. Enough to see Mississauga and
- * Markham at the edges, not enough to lose the city off-screen. */
-const BOUNDS_PAD = 0.45;
 const DEFAULT_ZOOM = 11;
 /* CARTO serves real raster tiles to z20, so that's where the map stops -- going further
  * would only upscale, which is what made the old Esri basemap go grainy past z16. */
@@ -1358,15 +1355,6 @@ function readHash() {
   return out;
 }
 
-/* The frame the map is allowed to occupy, from the exported extent of the trees. */
-function cityBounds(){
-  const [w, s0, e, n] = meta.coords.bounds;
-  return L.latLngBounds(
-    [s0 - BOUNDS_PAD, w - BOUNDS_PAD],
-    [n + BOUNDS_PAD, e + BOUNDS_PAD]
-  );
-}
-
 /* Find the tree nearest a coordinate, for restoring a shared link. */
 function findTreeNear(lat, lon) {
   let best = -1;
@@ -1643,13 +1631,6 @@ async function main() {
 
   const hash = readHash();
   if (hash && hash.mode) state.colourMode = hash.mode;
-  /* A centre outside the city is dropped rather than flown to. writeHash() re-pins the
-   * URL on every moveend, so without this one stray position becomes permanent: every
-   * reload returns to it, with no trees on screen and no obvious way back. */
-  if (hash && hash.center && !cityBounds().contains(L.latLng(hash.center))) {
-    delete hash.center;
-    delete hash.zoom;
-  }
 
   baseLayer = makeBaseLayer();
   map = L.map("map", {
@@ -1660,10 +1641,6 @@ async function main() {
     layers: [baseLayer],
     preferCanvas: true,
     worldCopyJump: false,
-    // Nothing -- a stray setView, a geocoder result, a hand-edited URL -- can strand the
-    // map on another continent. It eases back to the city instead.
-    maxBounds: cityBounds(),
-    maxBoundsViscosity: 0.6,
   });
   L.control.scale({ imperial: false }).addTo(map);
 
