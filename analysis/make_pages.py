@@ -140,16 +140,17 @@ METHOD = """        <div class="an-section">
           </p>
           <p class="an-note">
             The input is no better than the method. Recorded diameters heap on round
-            numbers, and <strong>164,966 trees &mdash; nearly a quarter of the
-            inventory &mdash; sit on exactly 4 cm or 8 cm</strong>, which is a field
-            convention rather than fifty thousand identical trunks. That flattens the
-            young end of every distribution on this page.
+            numbers, and <strong><span data-fact="dbhHeap"></span> trees &mdash;
+            <span data-fact="dbhHeapShare"></span> of the inventory &mdash; sit on
+            exactly 4 cm or 8 cm</strong>, which is a field convention rather than that
+            many identical trunks. That flattens the young end of every distribution on
+            this page.
           </p>
           <p class="an-note">
             Arithmetic on a bad diameter produces a bad age, and a slow-growing species
-            multiplies the error. 343 trees came out older than 250 years &mdash; a
-            203 cm yew, a 250 cm hawthorn, neither of which exists &mdash; and are
-            excluded from every figure here.
+            multiplies the error. <span data-fact="implausible"></span> trees came out
+            older than 250 years &mdash; a 203 cm yew, a 250 cm hawthorn, neither of
+            which exists &mdash; and are excluded from every figure here.
           </p>
         </div>
 """
@@ -180,8 +181,10 @@ STREET_METHOD = """        <div class="an-section">
             gardens can read as empty here.
           </p>
           <p class="an-note">
-            31,809 trees &mdash; 4.6% &mdash; could not be matched to any segment within
-            60 m of a street of their recorded name, and are missing from the counts.
+            <span data-fact="unsnapped"></span> trees &mdash;
+            <span data-fact="unsnappedPct"></span> &mdash; could not be matched to any
+            segment within 60 m of a street of their recorded name, and are missing
+            from the counts.
           </p>
           <p class="an-note">
             Trees are counted per block, not per side, so a one-sided planting and a
@@ -208,11 +211,10 @@ PEOPLE_METHOD = """        <div class="an-section">
         <div class="an-section">
           <h2>What this cannot tell you</h2>
           <p class="an-note">
-            <strong>A high ratio can mean nobody lives there.</strong> The extreme is a
-            1,125-hectare ravine area with 45 residents and 3,828 street trees, which
-            scores 85,000 trees per 1,000 people. That is an arithmetically correct way
-            of saying it is a ravine. Quintile classes keep one such area from taking
-            over the colour scale, but read the top class with that in mind.
+            <strong>A high ratio can mean nobody lives there.</strong> The extreme is
+            <span data-fact="extreme"></span>. That is an arithmetically correct way of
+            saying it is a ravine. Quintile classes keep one such area from taking over
+            the colour scale, but read the top class with that in mind.
           </p>
           <p class="an-note">
             Eight areas have no recorded residents at all and are left grey rather than
@@ -293,8 +295,9 @@ PAGES = [
         cap: 40,
         median: summary.median_per_100m,
         axis: ["0", "20", "40+ per 100 m"],
-        note: "Every block, by how densely it is planted. The spike at zero is the "
-            + "9,268 blocks with no inventoried street tree at all.",
+        note: "Every block, by how densely it is planted. The spike at zero is every "
+            + "block with no inventoried street tree at all, counted in the legend "
+            + "above.",
       }),
       stats: ({ summary, compact, num }) => [
         [num(summary.median_per_100m, 1), "Median per 100 m"],

@@ -93,8 +93,10 @@
             gardens can read as empty here.
           </p>
           <p class="an-note">
-            31,809 trees &mdash; 4.6% &mdash; could not be matched to any segment within
-            60 m of a street of their recorded name, and are missing from the counts.
+            <span data-fact="unsnapped"></span> trees &mdash;
+            <span data-fact="unsnappedPct"></span> &mdash; could not be matched to any
+            segment within 60 m of a street of their recorded name, and are missing
+            from the counts.
           </p>
           <p class="an-note">
             Trees are counted per block, not per side, so a one-sided planting and a
@@ -134,8 +136,9 @@
         cap: 40,
         median: summary.median_per_100m,
         axis: ["0", "20", "40+ per 100 m"],
-        note: "Every block, by how densely it is planted. The spike at zero is the "
-            + "9,268 blocks with no inventoried street tree at all.",
+        note: "Every block, by how densely it is planted. The spike at zero is every "
+            + "block with no inventoried street tree at all, counted in the legend "
+            + "above.",
       }),
       stats: ({ summary, compact, num }) => [
         [num(summary.median_per_100m, 1), "Median per 100 m"],

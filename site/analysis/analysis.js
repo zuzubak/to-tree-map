@@ -270,6 +270,36 @@
     }) + `<p class="an-chart-note">${dist.note}</p>`;
   }
 
+  /* Figures quoted in the page copy, filled from the payload at load.
+   *
+   * The pipeline reruns weekly and every one of these moves when it does. Written
+   * into the HTML they would be true on the day they were typed and quietly wrong
+   * afterwards -- which is a worse failure than having no number, because nothing
+   * about a stale figure looks stale. */
+  const FACTS = {
+    implausible: () => num(meta.implausible),
+    unsnapped: () => num(meta.unsnapped),
+    unsnappedPct: () => `${num((meta.unsnapped / meta.trees_total) * 100, 1)}%`,
+    dbhHeap: () => num(meta.dbh_heap),
+    dbhHeapShare: () => `${num((meta.dbh_heap / meta.trees_total) * 100, 0)}%`,
+    // The worst case for a per-resident ratio, found rather than remembered.
+    extreme: () => {
+      const top = features.reduce((a, f) =>
+        (f.properties[CONF.metric] || 0) > (a.properties[CONF.metric] || 0) ? f : a);
+      const p = top.properties;
+      return `a ${num(p.ha)}-hectare area with ${num(p.pop)} residents and `
+           + `${num(p.n)} street trees, which scores ${num(p.per1k)} trees per `
+           + `1,000 people`;
+    },
+  };
+
+  function renderFacts() {
+    for (const node of document.querySelectorAll("[data-fact]")) {
+      const fn = FACTS[node.dataset.fact];
+      if (fn) node.textContent = fn();
+    }
+  }
+
   function renderProvenance() {
     const host = el("provenance");
     if (!host) return;
@@ -528,6 +558,7 @@
     renderLegend();
     renderPanelChart();
     renderProvenance();
+    renderFacts();
     buildLayer();
     badge.hidden = true;
 

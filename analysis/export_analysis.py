@@ -207,6 +207,11 @@ def main() -> None:
         # distribution -- the block histograms are unreadable without something to
         # be compared against, and a block median only means "older" or "younger"
         # relative to this.
+        # Trees recorded at exactly 4 or 8 cm: the field convention the age caveat
+        # cites. Shipped rather than written into the copy, because it moves every
+        # time the City republishes.
+        "dbh_heap": con.execute(
+            "SELECT count(*) FROM street_trees WHERE dbh_cm IN (4, 8)").fetchone()[0],
         "city_median_age": con.execute(
             "SELECT round(median(age_years),1) FROM tree_age WHERE plausible").fetchone()[0],
         "city_mean_age": con.execute(
