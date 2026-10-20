@@ -233,3 +233,130 @@ body { --an-null: #b4b2aa; }
 }
 
 .tree-tip .tip-cross { color: var(--text-muted); }
+
+/* ---- Density scatter ------------------------------------------------------
+   Six categories is past what colour alone can carry: checked all-pairs in OKLab
+   under simulated deuteranopia, protanopia and tritanopia, the best six of the
+   house palette still separate by only 6.8 under deuteranopia against a floor of
+   8, and the default six fall to 3.3 -- two of them indistinguishable. These are
+   the best-separating six, and the legend and table carry every figure in text so
+   nothing on the page is readable only by hue. */
+
+body[data-ramp="muni"] {
+  --muni-1: #2a78d6;  /* East York   */
+  --muni-2: #1baf7a;  /* Etobicoke   */
+  --muni-3: #eda100;  /* North York  */
+  --muni-4: #008300;  /* Scarborough */
+  --muni-5: #4a3aa7;  /* Toronto     */
+  --muni-6: #e34948;  /* York        */
+  --an-null: #b4b2aa;
+}
+
+@media (prefers-color-scheme: dark) {
+  body[data-ramp="muni"] {
+    --muni-1: #3987e5;
+    --muni-2: #199e70;
+    --muni-3: #c98500;
+    --muni-4: #00a000;
+    --muni-5: #9085e9;
+    --muni-6: #e66767;
+  }
+}
+
+#chart-pane {
+  flex: 1;
+  min-width: 0;
+  position: relative;
+  display: flex;
+  padding: 16px 18px;
+  background: var(--page-plane);
+}
+
+.chart-box { position: relative; flex: 1; min-width: 0; }
+#chart { display: block; }
+
+/* The readout rides over the plot, pinned to the top so it never sits under the
+   crosshair it is describing. */
+.chart-tip {
+  position: absolute;
+  z-index: 5;
+  min-width: 190px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--surface-1);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.12);
+  font-size: 12px;
+  pointer-events: none;
+}
+
+.chart-tip[hidden] { display: none; }
+.chart-tip .tip-head { font-weight: 600; font-size: 12.5px; margin-bottom: 4px; }
+.chart-tip .tip-note { margin-top: 4px; font-size: 11px; color: var(--text-muted); }
+
+.muni-legend { display: flex; flex-direction: column; gap: 3px; }
+
+.muni-chip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 4px 7px;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  background: none;
+  font: inherit;
+  font-size: 12px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  text-align: left;
+}
+
+.muni-chip:hover { background: var(--page-plane); border-color: var(--border); }
+.muni-chip[data-active="false"] { opacity: 0.4; }
+.muni-chip .swatch { width: 10px; height: 10px; border-radius: 50%; flex: none; }
+.muni-chip .muni-name { flex: 1 1 auto; }
+.muni-chip .muni-count { font-variant-numeric: tabular-nums; font-size: 11px; color: var(--text-muted); }
+
+#muni-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+
+#muni-table th, #muni-table td {
+  text-align: right;
+  padding: 5px 0 5px 10px;
+  border-bottom: 1px solid var(--gridline);
+  font-variant-numeric: tabular-nums;
+}
+
+#muni-table thead th {
+  font-size: 10.5px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+  padding-left: 10px;
+}
+
+#muni-table tbody th {
+  text-align: left;
+  font-weight: 500;
+  color: var(--text-primary);
+  padding-left: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+#muni-table tbody th .swatch { width: 9px; height: 9px; border-radius: 50%; flex: none; }
+#muni-table tbody tr { cursor: pointer; }
+#muni-table tbody tr:hover { background: var(--page-plane); }
+#muni-table tbody tr[data-active="false"] { opacity: 0.4; }
+
+@media (max-width: 860px) {
+  #chart-pane { padding: 10px 8px 46vh; }
+}
+
+.line-key { display: flex; flex-direction: column; gap: 5px; font-size: 12px; color: var(--text-secondary); }
+.line-key span { display: flex; align-items: center; gap: 8px; }
+.line-key i { width: 22px; height: 0; flex: none; }
+.line-key i.solid { border-top: 2.5px solid var(--text-primary); }
+.line-key i.dashed { border-top: 2px dashed var(--text-secondary); }

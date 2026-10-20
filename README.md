@@ -241,6 +241,7 @@ because they differ only in which number they colour by.
 | `age.html` | street block | median estimated age |
 | `streets.html` | street block | trees per 100 m of street |
 | `people.html` | census area | trees per 1,000 residents |
+| `density.html` | census area | population density vs trees per 100 m (scatter) |
 
 ### Estimated age, and why it is only an estimate
 
@@ -287,6 +288,39 @@ two sources, in order:
    address range changes) and at such a cut the only neighbour shares the street name, so
    topology leaves that end unnamed — where it named one end, the other name in the pair is
    the other end. That adds ~4,500 more, for 78% with both ends named.
+
+### Density against planting, and the answer being "no"
+
+`density.html` plots one point per census area: residents per hectare against street
+trees per 100 m, coloured by former municipality, with a least-squares trend line fitted
+on log density.
+
+**The finding is a null result, and the page says so.** Across three decades of density
+the line is nearly flat and explains **0.9%** of the variance between areas. The only
+real signal is at the top: the decile means sit between 13 and 15 trees per 100 m for
+nine tenths of areas and drop to 11.6 in the densest tenth, above roughly 176 residents
+per hectare. Isolating old Toronto gives the steepest relationship anywhere in the city
+and it is still only R² 0.046.
+
+Because a straight line through a cloud with R² 0.009 invites more confidence than it
+has earned, the chart also draws the decile means — the shape the line cannot show —
+and the hover readout gives both: what the trend predicts at that density, and what the
+areas actually sitting near it average, with how many there are.
+
+The x axis is logarithmic because density spans four and a half decades; on a linear one
+the median area sits at 0.6% of the width.
+
+Former municipality comes from the City's
+[boundary file](https://open.toronto.ca/dataset/former-municipality-boundaries/), by
+largest overlap — census areas do not nest inside the 1998 boundaries, and ward names
+only look like they encode them (Eglinton-Lawrence spans old Toronto and North York).
+
+**Six categories is past what colour can carry.** Checked as all pairs in OKLab under
+simulated deuteranopia, protanopia and tritanopia, the best six of this site's palette
+separate by 6.8 at worst against a floor of 8, and the default first six fall to 3.3 —
+two of them indistinguishable. The page uses the best-separating six and then makes sure
+nothing depends on hue: every municipality's count, medians and slope are in a table,
+and clicking either the legend or a table row isolates it.
 
 ### Why census *areas*, not census blocks
 

@@ -31,6 +31,7 @@ aged as (
 
 select
     a.dauid,
+    m.municipality,
     a.population,
     a.dwellings,
     round(a.area_m2 / 10000, 2) as area_ha,
@@ -46,7 +47,19 @@ select
     case when a.population > 0
          then round(coalesce(t.tree_count, 0) * 1000.0 / a.population, 1) end as trees_per_1000,
     case when a.area_m2 > 0
-         then round(coalesce(t.tree_count, 0) / (a.area_m2 / 10000.0), 1) end as trees_per_ha
+         then round(coalesce(t.tree_count, 0) / (a.area_m2 / 10000.0), 1) end as trees_per_ha,
+    -- Residents per hectare: the density axis of the scatter.
+    case when a.area_m2 > 0
+         then round(a.population / (a.area_m2 / 10000.0), 2) end as people_per_ha,
+    round(s.street_m) as street_m,
+    -- The same measure the street map draws, re-asked of an area rather than a block:
+    -- every tree inside it over every metre of street inside it. Below 200 m of street
+    -- the ratio is noise -- a stub of road through a ravine with four trees on it is
+    -- not a densely planted place.
+    case when s.street_m >= 200
+         then round(coalesce(t.tree_count, 0) * 100.0 / s.street_m, 2) end as trees_per_100m
 from area a
 left join trees t using (dauid)
 left join aged g using (dauid)
+left join {{ source('geo', 'da_municipality') }} m using (dauid)
+left join {{ source('geo', 'segment_area') }} s using (dauid)

@@ -21,3 +21,6 @@ sources:
       - name: tree_area
       - name: tree_segment
       - name: segment_crossings
+      - name: former_municipalities
+      - name: da_municipality
+      - name: segment_area

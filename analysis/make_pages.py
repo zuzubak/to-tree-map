@@ -17,6 +17,7 @@ NAV = [
     ("age.html", "Estimated age"),
     ("streets.html", "Trees per 100 m"),
     ("people.html", "Trees per resident"),
+    ("density.html", "Density vs planting"),
     ("../", "← All 688,335 trees"),
 ]
 

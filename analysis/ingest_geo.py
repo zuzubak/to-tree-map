@@ -54,6 +54,30 @@ def fetch_centreline() -> Path:
     return CENTRELINE_FILE
 
 
+MUNI_FILE = DATA / "former_municipalities.geojson"
+MUNI_PACKAGE = "former-municipality-boundaries"
+
+
+def fetch_municipalities() -> Path:
+    """The six pre-amalgamation municipalities, as published by the City.
+
+    Worth taking from the City rather than inferring: ward names look like they
+    encode this (Etobicoke North, Scarborough Southwest) but the 25-ward model does
+    not nest inside the old boundaries -- Eglinton-Lawrence spans old Toronto and
+    North York, York South-Weston spans York and more. Real boundaries or nothing.
+    """
+    if MUNI_FILE.exists():
+        print(f"  boundaries already present ({MUNI_FILE.stat().st_size/1e6:.1f} MB)")
+        return MUNI_FILE
+    pkg = package_show(MUNI_PACKAGE)
+    res = next(r for r in pkg["resources"] if r["name"].endswith("4326.geojson"))
+    print("  downloading former municipality boundaries")
+    r = requests.get(res["url"], timeout=120)
+    r.raise_for_status()
+    MUNI_FILE.write_bytes(r.content)
+    return MUNI_FILE
+
+
 def main() -> None:
     con = connect(spatial=True)
     con.execute("CREATE SCHEMA IF NOT EXISTS geo")
@@ -159,6 +183,22 @@ def main() -> None:
            FROM geo.segment_crossings"""
     ).fetchone()
     print(f"  both ends named: {both:,} of {n:,} ({both/n*100:.1f}%); neither end: {one:,}")
+
+    print("Former municipalities")
+    muni = fetch_municipalities()
+    con.execute("DROP TABLE IF EXISTS geo.former_municipalities")
+    con.execute(
+        f"""
+        CREATE TABLE geo.former_municipalities AS
+        SELECT AREA_NAME AS municipality, {metric('geom')} AS geom_m
+        FROM st_read('{muni}')
+        WHERE geom IS NOT NULL
+        """
+    )
+    names = con.execute(
+        "SELECT string_agg(municipality, ', ' ORDER BY municipality) FROM geo.former_municipalities"
+    ).fetchone()[0]
+    print(f"  {names}")
 
     print("Dissemination areas")
     zipf = download_census(DATA / "census_98100015.zip")
@@ -292,6 +332,55 @@ def main() -> None:
     ).fetchone()
     print(f"  snapped to a street segment: {got:,} of {total:,} ({got/total*100:.1f}%), "
           f"median {med:.0f} m from the centreline")
+
+    # ---- what each census area is and how much street it holds ------------------
+    #
+    # The scatter plots one point per census area, so both of its axes have to be
+    # measured on that unit: population density from the census, and trees per 100 m
+    # against the street length inside the area's own boundary.
+    print("Measuring areas")
+    con.execute("DROP TABLE IF EXISTS geo.da_municipality")
+    con.execute(
+        """
+        CREATE TABLE geo.da_municipality AS
+        WITH overlap AS (
+            SELECT a.dauid, m.municipality,
+                   st_area(st_intersection(a.geom_m, m.geom_m)) AS shared,
+                   row_number() OVER (
+                       PARTITION BY a.dauid
+                       ORDER BY st_area(st_intersection(a.geom_m, m.geom_m)) DESC
+                   ) AS rn
+            FROM geo.dissemination_areas a
+            JOIN geo.former_municipalities m ON st_intersects(a.geom_m, m.geom_m)
+        )
+        -- Census areas do not nest inside the 1998 boundaries, so a handful straddle
+        -- one. Largest overlap wins rather than a centroid, which lands outside its
+        -- own polygon on the horseshoe-shaped areas along the ravines.
+        SELECT dauid, municipality FROM overlap WHERE rn = 1
+        """
+    )
+    con.execute("DROP TABLE IF EXISTS geo.segment_area")
+    con.execute(
+        """
+        CREATE TABLE geo.segment_area AS
+        -- Clipped to the boundary, not assigned whole: a street running along the edge
+        -- between two areas belongs half to each, and assigning it to whichever side
+        -- its midpoint fell on would hand one area a free kilometre and charge the
+        -- other for nothing.
+        SELECT a.dauid, sum(st_length(st_intersection(s.geom_m, a.geom_m))) AS street_m
+        FROM geo.street_segments s
+        JOIN geo.dissemination_areas a ON st_intersects(s.geom_m, a.geom_m)
+        GROUP BY 1
+        """
+    )
+    km, areas, unplaced = con.execute(
+        """SELECT round(sum(street_m)/1000), count(*),
+                  (SELECT count(*) FROM geo.dissemination_areas d
+                   LEFT JOIN geo.da_municipality m USING (dauid) WHERE m.dauid IS NULL)
+           FROM geo.segment_area"""
+    ).fetchone()
+    print(f"  {km:,.0f} km of street across {areas:,} areas; "
+          f"{unplaced} areas outside every former municipality")
     con.close()
 
 

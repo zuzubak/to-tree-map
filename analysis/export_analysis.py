@@ -187,6 +187,44 @@ def main() -> None:
     write(OUT / "streets.geojson",
           {"type": "FeatureCollection", "summary": seg_summary, "features": seg_features})
 
+    # ---- scatter: one point per census area -------------------------------------
+    #
+    # Density against planting, on the one unit that can carry both. Population only
+    # exists at census-area level, so the area is the point; asking it of a street
+    # segment would mean giving every segment in an area the same x and plotting 39,000
+    # points in 3,727 vertical stripes.
+    muni_names = [r[0] for r in con.execute(
+        "SELECT DISTINCT municipality FROM da_metrics WHERE municipality IS NOT NULL"
+        " ORDER BY municipality").fetchall()]
+    muni_ix = {m: i for i, m in enumerate(muni_names)}
+    pts = con.execute(
+        """
+        SELECT m.dauid, m.municipality, m.people_per_ha, m.trees_per_100m,
+               m.population, m.tree_count, m.area_ha, m.street_m, w.ward_name
+        FROM da_metrics m
+        LEFT JOIN (
+            SELECT a.dauid, mode(t.ward_name) AS ward_name
+            FROM geo.tree_area a JOIN street_trees t USING (object_id)
+            GROUP BY a.dauid
+        ) w USING (dauid)
+        WHERE m.trees_per_100m IS NOT NULL
+          AND m.municipality IS NOT NULL
+          -- Density is plotted on a log axis, where nobody-lives-here has no place:
+          -- an area with no residents is not at the low end of the scale, it is off it.
+          AND m.population > 0
+        ORDER BY m.people_per_ha
+        """
+    ).fetchall()
+    scatter = {
+        "municipalities": muni_names,
+        "points": [
+            {"id": r[0], "m": muni_ix[r[1]], "x": r[2], "y": r[3], "pop": r[4],
+             "n": r[5], "ha": r[6], "street": int(r[7]), "ward": r[8]}
+            for r in pts
+        ],
+    }
+    write(OUT / "scatter.json", scatter)
+
     # ---- shared metadata: provenance of the age estimate ----
     basis = con.execute(
         "SELECT basis, count(*) FROM tree_age WHERE plausible GROUP BY 1 ORDER BY 2 DESC"
