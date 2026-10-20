@@ -566,6 +566,7 @@ const TreeLayer = L.Renderer.extend({
    * colour so the fill count stays at the number of palette slots. */
   _drawCircles(shown) {
     const ctx = this._ctx;
+    const c = this._container;
     const m = this._dpr;
     ctx.setTransform(m, 0, 0, m, 0, 0);
     const { ox, oy } = this._toDevice();
@@ -596,6 +597,21 @@ const TreeLayer = L.Renderer.extend({
     const buckets = [];
     for (let s = 0; s < palette.css.length; s++) buckets.push([]);
 
+    /* Occupancy of a coarse screen grid, filled as we bucket. The boost above is driven
+     * by how many trees the filter leaves in the whole city, which says nothing about
+     * how tightly they sit in the view in front of you -- 3,000 oaks are scattered at
+     * z16 and stacked on top of each other at z10, and one radius cannot serve both.
+     * Trees per occupied cell measures the crowding that actually matters. */
+    const CROWD_CELL = 16;        // CSS px
+    const vw = c.width / m, vh = c.height / m;
+    const cols = Math.max(1, Math.ceil(vw / CROWD_CELL));
+    const rows = Math.max(1, Math.ceil(vh / CROWD_CELL));
+    if (!this._crowd || this._crowd.length < cols * rows) this._crowd = new Uint8Array(cols * rows);
+    const crowd = this._crowd;
+    crowd.fill(0, 0, cols * rows);
+    let onScreen = 0;
+    let occupied = 0;
+
     for (let gy = gy0; gy <= gy1; gy++) {
       const rowBase = gy * GRID;
       const from = start[rowBase + gx0];
@@ -604,7 +620,27 @@ const TreeLayer = L.Renderer.extend({
         const i = order[k];
         if (!visible[i]) continue;
         buckets[colourIdx[i]].push(i);
+        // _bounds is padded past the viewport, so some of these sit just off-screen.
+        // Only what is actually on it should vote on how crowded the view is.
+        const cx = ((nx[i] * S - origin.x) - ox) / CROWD_CELL | 0;
+        const cy = ((ny[i] * S - origin.y) - oy) / CROWD_CELL | 0;
+        if (cx >= 0 && cx < cols && cy >= 0 && cy < rows) {
+          onScreen += 1;
+          const cell = cy * cols + cx;
+          if (!crowd[cell]) { crowd[cell] = 1; occupied += 1; }
+        }
       }
+    }
+
+    /* Cap the floor so dots cover at most this much of the ground they sit on. Only the
+     * boost is capped: a big trunk still draws at its real size, and dense views never
+     * had the boost to begin with. */
+    const CROWD_TARGET = 0.35;
+    const CROWD_FLOOR = 1.4;
+    if (sparse && occupied > 0) {
+      const perCell = onScreen / occupied;
+      const capR = Math.sqrt((CROWD_TARGET * CROWD_CELL * CROWD_CELL) / (perCell * Math.PI));
+      minR = Math.max(CROWD_FLOOR, Math.min(minR, capR));
     }
 
     const TAU = Math.PI * 2;
