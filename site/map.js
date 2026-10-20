@@ -608,32 +608,54 @@ const TreeLayer = L.Renderer.extend({
     }
 
     const TAU = Math.PI * 2;
+    /* Built once per colour as a Path2D, because the halo and the fill are two
+     * separate passes over the same circles and recomputing the geometry twice is the
+     * one thing this loop cannot afford. */
+    const paths = [];
     // Muted slot first so highlighted trees land on top of it.
     for (let s = 0; s < buckets.length; s++) {
       const bucket = buckets[s];
-      if (!bucket.length) continue;
-      ctx.beginPath();
+      if (!bucket.length) { paths.push(null); continue; }
+      const path = new Path2D();
       for (const i of bucket) {
         const x = nx[i] * S - origin.x;
         const y = ny[i] * S - origin.y;
         const d = dbh[i];
         const r = Math.max(minR, (d ? d : 12) * 0.5 * scaleFactor);
-        ctx.moveTo(x + r, y);
-        ctx.arc(x, y, r, 0, TAU);
+        path.moveTo(x + r, y);
+        path.arc(x, y, r, 0, TAU);
       }
-      ctx.fillStyle = palette.css[s];
-      ctx.globalAlpha = 0.85;
-      ctx.fill();
-      ctx.globalAlpha = 1;
-      /* A ring in the panel surface colour cuts each dot out of the basemap, so an
-       * isolated tree doesn't disappear into park green or a road casing. Same trick the
-       * permit map uses on its points. Only worth the stroke when dots are scarce. */
-      if (sparse) {
-        ctx.strokeStyle = cssVar("--surface-1");
-        ctx.lineWidth = 1.4;
-        ctx.stroke();
-      }
+      paths.push(path);
     }
+
+    /* A halo in the panel surface colour cuts an isolated tree out of the basemap, so
+     * it doesn't vanish into park green or a road casing. Same trick the permit map
+     * uses on its points, and only worth the stroke when dots are scarce.
+     *
+     * Every halo goes down before any fill. Stroking each colour straight after its own
+     * fill drew each dot's ring over its neighbours, so a cluster came out as a mesh of
+     * white hairlines instead of a mass of colour. Underneath, a neighbour's fill simply
+     * covers the halo and overlapping trees read as one cloud, while a dot with nothing
+     * near it keeps the full ring.
+     *
+     * The stroke is centred on the circle's edge, so half of this width sits outside
+     * the dot and the inner half is painted over by the fill. */
+    if (sparse) {
+      ctx.strokeStyle = cssVar("--surface-1");
+      ctx.lineWidth = 2;
+      for (const path of paths) if (path) ctx.stroke(path);
+    }
+
+    // Fully opaque where dots are scarce: the point of the cloud is that it reads as
+    // one solid colour. Dense views keep the slight transparency, which is what lets
+    // overlapping canopy show its own depth.
+    ctx.globalAlpha = sparse ? 1 : 0.85;
+    for (let s = 0; s < paths.length; s++) {
+      if (!paths[s]) continue;
+      ctx.fillStyle = palette.css[s];
+      ctx.fill(paths[s]);
+    }
+    ctx.globalAlpha = 1;
     this._circleScale = { scaleFactor, minR };
   },
 
