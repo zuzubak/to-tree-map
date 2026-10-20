@@ -27,6 +27,16 @@ aged as (
     join {{ ref('tree_age') }} a using (object_id)
     where a.plausible
     group by 1
+),
+
+-- Licensed parking on residential front land, counted at the address and so given to
+-- the area holding most of its block rather than split along it the way street length
+-- is. A permit sits at one house.
+parking as (
+    select d.dauid, sum(p.spaces) as parking_spaces, count(*) as parking_permits
+    from {{ source('geo', 'parking_segment') }} p
+    join {{ source('geo', 'segment_da') }} d using (centreline_id)
+    group by 1
 )
 
 select
@@ -57,9 +67,16 @@ select
     -- the ratio is noise -- a stub of road through a ravine with four trees on it is
     -- not a densely planted place.
     case when s.street_m >= 200
-         then round(coalesce(t.tree_count, 0) * 100.0 / s.street_m, 2) end as trees_per_100m
+         then round(coalesce(t.tree_count, 0) * 100.0 / s.street_m, 2) end as trees_per_100m,
+    coalesce(k.parking_spaces, 0) as parking_spaces,
+    coalesce(k.parking_permits, 0) as parking_permits,
+    -- The same denominator the tree ratio uses, so the two are directly comparable.
+    case when s.street_m >= 200
+         then round(coalesce(k.parking_spaces, 0) * 100.0 / s.street_m, 2)
+    end as parking_per_100m
 from area a
 left join trees t using (dauid)
 left join aged g using (dauid)
 left join {{ source('geo', 'da_municipality') }} m using (dauid)
 left join {{ source('geo', 'segment_area') }} s using (dauid)
+left join parking k using (dauid)

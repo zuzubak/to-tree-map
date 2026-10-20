@@ -1,0 +1,226 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Front-Yard Parking vs Street Trees</title>
+  <meta name="description" content="Does licensed front-yard parking come at the cost of street trees? Licensed parking spaces against street trees per 100 m for every census area in Toronto, coloured by former municipality.">
+  <link rel="canonical" href="https://malcolmkennedy.com/to-tree-map/analysis/parking.html">
+
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="Malcolm Kennedy">
+  <meta property="og:url" content="https://malcolmkennedy.com/to-tree-map/analysis/parking.html">
+  <meta property="og:title" content="Front-Yard Parking vs Street Trees">
+  <meta property="og:description" content="Licensed front-yard parking spaces against street trees per 100 m for every census area in Toronto, coloured by former municipality.">
+  <meta name="twitter:card" content="summary">
+
+  <meta name="theme-color" content="#ffffff">
+  <link rel="stylesheet" href="../style.css">
+  <link rel="stylesheet" href="analysis.css">
+</head>
+<body data-ramp="muni">
+<script src="/header.js"></script>
+  <div class="app">
+    <main id="chart-pane">
+      <div class="chart-box">
+        <canvas id="chart"></canvas>
+        <div class="chart-tip" id="tip" hidden></div>
+      </div>
+      <div class="map-badge" id="loading-badge">
+        <span class="spinner" aria-hidden="true"></span>
+        <span>Loading 3,570 census areas&hellip;</span>
+      </div>
+    </main>
+
+    <aside class="panel" id="panel">
+      <div class="panel-handle-row">
+        <button class="panel-drag-handle" id="panel-toggle" aria-label="Toggle panel" aria-expanded="false">
+          <span class="handle-bar"></span>
+          <span class="handle-label">Stats &amp; legend</span>
+        </button>
+        <button class="panel-hide-btn" id="panel-hide" aria-label="Hide panel and show chart">
+          Hide &#9660;
+        </button>
+      </div>
+
+      <div class="panel-scroll">
+        <header class="panel-header">
+          <h1>Does paving the front cost you trees?</h1>
+          <nav class="an-nav" aria-label="Analyses">
+            <a href="../">All 688,335 trees</a>
+            <a href="age.html">Estimated age</a>
+            <a href="streets.html">Trees per 100 m</a>
+            <a href="people.html">Trees per resident</a>
+            <a href="density.html">Density vs planting</a>
+            <a href="parking.html" aria-current="page">Front-yard parking</a>
+          </nav>
+          <p class="an-subtitle">
+            Every census area in Toronto, plotted by its licensed front-yard parking
+            against its street trees, both per 100 m of street. The line is the average
+            of each bin along the axis; hover it to read any level.
+          </p>
+          <div class="stats" id="stats"></div>
+        </header>
+
+        <div class="an-section">
+          <h2>The short answer</h2>
+          <p class="an-note">
+            <strong>It does not &mdash; if anything the opposite.</strong> Areas with no
+            licensed front-yard parking average about 13.7 street trees per 100 m. Areas
+            with the most average closer to 17.
+          </p>
+          <p class="an-note">
+            That reads backwards until you notice the two things sit on different land.
+            A front-yard permit covers <em>private</em> ground between the house and the
+            sidewalk; a street tree stands on the <em>public</em> allowance beyond it.
+            Paving a front yard does not remove a City tree, and the streets where people
+            bother to license parking &mdash; narrow old-city lots with no driveway and
+            no garage &mdash; are also the streets with the oldest and densest planting.
+          </p>
+
+        </div>
+
+        <div class="an-section">
+          <h2>Read this one carefully</h2>
+          <p class="an-note">
+            <strong>The x axis is partly a map of which bylaw you live under.</strong>
+            Front-yard parking licensing is a legacy of the old City of Toronto, York and
+            East York. Those three hold
+            <span data-fact="oldCityShare"></span> of every licensed space in the city.
+            In North York, Etobicoke and Scarborough almost nobody applies, because the
+            houses were built with driveways and garages and need no permit.
+          </p>
+          <p class="an-note">
+            So <span data-fact="noneAreas"></span> areas &mdash;
+            <span data-fact="nonePct"></span> of the chart &mdash; sit at zero, and most
+            of them are suburban. Citywide, moving right along this axis partly means
+            moving into the old city. Isolate Toronto, York or East York below to see the
+            relationship inside the places where the permit actually exists; the shape
+            barely changes, which is the useful part.
+          </p>
+          <h2>Former municipality</h2>
+          <p class="an-note">
+            Click one to isolate it; the trend line and the figures above follow. The
+            rest of the city stays on the chart in grey so the comparison is against
+            something.
+          </p>
+          <div class="muni-legend" id="legend"></div>
+        </div>
+
+        <div class="an-section">
+          <h2>The line</h2>
+          <div class="line-key">
+            <span><i class="solid"></i>Average trees per 100 m in each parking bin</span>
+          </div>
+          <p class="an-note">
+            Eight bins, one licensed space per 100 m wide. The last holds everything from
+            7 upward, which is the only way the busiest end has enough areas in it to
+            average honestly; a bin under 12 areas is dropped and the line breaks rather
+            than chasing noise.
+          </p>
+        </div>
+
+        <div class="an-section">
+          <h2>By municipality</h2>
+          <div class="table-scroll">
+            <table id="muni-table">
+              <thead>
+                <tr>
+                  <th scope="col">Municipality</th>
+                  <th scope="col">Areas</th>
+                  <th scope="col">Median parking</th>
+                  <th scope="col">Median trees</th>
+                  <th scope="col">Busiest tenth</th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+          <p class="an-note">
+            Parking and trees are both per 100 m of street, as medians. The last column
+            is the average planting across that municipality's most heavily licensed
+            tenth of areas.
+          </p>
+        </div>
+
+        <div class="an-section">
+          <h2>How this is measured</h2>
+          <p class="an-note">
+            <span data-fact="permits"></span> permits covering
+            <span data-fact="spaces"></span> licensed spaces, from the City's
+            <a href="https://open.toronto.ca/dataset/residential-front-yard-parking/">Residential
+            Front Yard Parking</a> register:
+            <span data-fact="frontYard"></span> front yard,
+            <span data-fact="widened"></span> widened driveway and
+            <span data-fact="boulevard"></span> boulevard spaces, all counted.
+          </p>
+          <p class="an-note">
+            The register gives a street number and name but no coordinates. Each permit is
+            placed on the block whose address range contains its number &mdash; the
+            centreline publishes those ranges per side, so no geocoding service is
+            involved &mdash; which places <span data-fact="placedPct"></span> of licensed
+            spaces. A permit sits at one house, so it is given to the area holding most of
+            its block rather than split along it the way street length is.
+          </p>
+          <p class="an-note">
+            Both axes are divided by the same street length, clipped to each area's own
+            boundary, so they are directly comparable. Areas holding less than 200 m of
+            street are left out.
+          </p>
+        </div>
+
+        <div class="an-section">
+          <h2>What this cannot tell you</h2>
+          <p class="an-note">
+            <strong>Licensed is not the same as paved.</strong> This is the permit
+            register, not a survey of front gardens. Unlicensed parking pads exist and
+            are invisible here, and a lapsed permit on a still-paved yard is too.
+          </p>
+          <p class="an-note">
+            <strong>Street trees are not canopy.</strong> The thing a paved front yard
+            most plausibly costs you is a <em>private</em> tree, and no private tree is in
+            this dataset. A flat line here is not evidence that front-yard parking is
+            harmless to the urban forest; it is evidence that it does not show up in the
+            City's street tree inventory.
+          </p>
+          <p class="an-note">
+            This is an association between areas, not a history. Nothing here says which
+            came first on any given street.
+          </p>
+                    <p class="an-note">
+            <strong>Six colours cannot be made colourblind-safe.</strong> Checked as all
+            pairs in OKLab under simulated deuteranopia, protanopia and tritanopia, the
+            best six of this site's palette still separate by less than the usual floor.
+            That is why every municipality's figures are in the table above, and why
+            clicking one isolates it &mdash; nothing on this page is readable only by hue.
+          </p>
+        </div>
+      </div>
+    </aside>
+  </div>
+
+  <script src="../panel.js"></script>
+  <script>
+    window.SCATTER = {
+      xKey: "park",
+      xScale: "linear",
+      xMin: 0,
+      xMax: 8,
+      ticks: [0, 1, 2, 3, 4, 5, 6, 7, 8],
+      xLabel: "Licensed front-yard parking spaces per 100 m of street",
+      xUnit: "licensed spaces per 100 m",
+      xShort: "per 100 m",
+      xDecimals: 1,
+      yMax: 45,
+      yLabel: "Street trees per 100 m",
+      bins: 8,
+      minBin: 12,
+    };
+  </script>
+  <script src="scatter.js"></script>
+
+  <!-- Pageview counts only (GoatCounter): no cookies, so no consent banner needed. -->
+  <script data-goatcounter="https://zuzubak.goatcounter.com/count"
+          async src="//gc.zgo.at/count.js"></script>
+</body>
+</html>

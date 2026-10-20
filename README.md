@@ -242,6 +242,7 @@ because they differ only in which number they colour by.
 | `streets.html` | street block | trees per 100 m of street |
 | `people.html` | census area | trees per 1,000 residents |
 | `density.html` | census area | population density vs trees per 100 m (scatter) |
+| `parking.html` | census area | licensed front-yard parking vs trees per 100 m (scatter) |
 
 ### Estimated age, and why it is only an estimate
 
@@ -325,6 +326,36 @@ separate by 6.8 at worst against a floor of 8, and the default first six fall to
 two of them indistinguishable. The page uses the best-separating six and then makes sure
 nothing depends on hue: every municipality's count, medians and densest-tenth average are
 in a table, and clicking either the legend or a table row isolates it.
+
+### Front-yard parking against planting
+
+`parking.html` is the same scatter with the x axis swapped for licensed front-yard
+parking spaces per 100 m, from the City's
+[Residential Front Yard Parking](https://open.toronto.ca/dataset/residential-front-yard-parking/)
+register — 18,033 permits covering 18,889 licensed spaces.
+
+**The answer is no, and mildly the opposite.** Areas with no licensed parking average
+13.7 street trees per 100 m; the most heavily licensed average 16.8. Isolating old
+Toronto makes it steeper, 14.1 to 19.3. The reason is that the two things sit on
+different land: a permit covers *private* ground between house and sidewalk, while a
+street tree stands on the *public* allowance beyond it. Paving a front yard does not
+remove a City tree, and the streets where people bother to license parking — narrow
+old-city lots with no driveway — are also the oldest and most densely planted.
+
+**The axis is partly a map of which bylaw you live under**, and the page says so up
+front. Licensing is a legacy of the old City of Toronto, York and East York, which hold
+99% of every licensed space; the suburbs were built with driveways and need no permit.
+70% of areas sit at zero and most of them are suburban.
+
+The register has street numbers but no coordinates. Each permit is placed on the block
+whose address range contains its number — the centreline publishes `LO_NUM`/`HI_NUM` per
+side, which places **99.4%** of licensed spaces and avoids the 590 MB address-point file
+entirely. A permit sits at one house, so it goes to the area holding most of its block,
+where street length is clipped and split between areas instead.
+
+The scatter engine is shared with `density.html`: the pages differ only in a config
+block declaring the x field, its scale (log for density, linear here), domain, bins and
+labels.
 
 ### Why census *areas*, not census blocks
 

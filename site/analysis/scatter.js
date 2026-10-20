@@ -13,13 +13,12 @@
 
   const DATA = "../data/analysis/scatter.json";
 
-  /* Density spans four and a half decades, so the x axis is logarithmic -- on a linear
-   * one the median area sits at 0.6% of the width and the whole city is a smear against
-   * the left edge. The domain stops at three clean decades: one area is sparser than 1
-   * person per hectare and four are denser than 1,000, and those five are pinned to the
-   * edges rather than given two more decades of empty chart. */
-  const X_MIN = 1, X_MAX = 1000;
-  const Y_MAX = 45;            // 99.8th percentile; a handful of denser blocks pin to the top
+  /* Both scatter pages are this file with a different x axis, declared by the page
+   * before it loads. See density.html for the shape. */
+  const CONF = window.SCATTER;
+  const X_MIN = CONF.xMin, X_MAX = CONF.xMax;
+  const LOG = CONF.xScale === "log";
+  const Y_MAX = CONF.yMax;
   const PAD = { t: 18, r: 18, b: 44, l: 54 };
 
   let points = [];
@@ -40,14 +39,24 @@
   const pretty = (s) => s.toLowerCase().replace(/\b[a-z]/g, (c) => c.toUpperCase());
 
   const clampX = (x) => Math.min(X_MAX, Math.max(X_MIN, x));
-  const LX0 = Math.log10(X_MIN), LX1 = Math.log10(X_MAX);
+  const LX0 = LOG ? Math.log10(X_MIN) : X_MIN;
+  const LX1 = LOG ? Math.log10(X_MAX) : X_MAX;
+
+  /* Position on the axis as a fraction of its width, and back again. Everything that
+   * measures along x -- the scales, the bins, the crosshair -- goes through these, so
+   * a log axis and a linear one are the same code with a different pair. */
+  const tx = (x) => ((LOG ? Math.log10(clampX(x)) : clampX(x)) - LX0) / (LX1 - LX0);
+  const itx = (u) => {
+    const v = LX0 + u * (LX1 - LX0);
+    return LOG ? Math.pow(10, v) : v;
+  };
 
   function plot() {
     return { w: W - PAD.l - PAD.r, h: H - PAD.t - PAD.b };
   }
   function sx(x) {
     const p = plot();
-    return PAD.l + ((Math.log10(clampX(x)) - LX0) / (LX1 - LX0)) * p.w;
+    return PAD.l + tx(x) * p.w;
   }
   function sy(y) {
     const p = plot();
@@ -55,7 +64,7 @@
   }
   function xAt(px) {
     const p = plot();
-    return Math.pow(10, LX0 + ((px - PAD.l) / p.w) * (LX1 - LX0));
+    return itx((px - PAD.l) / p.w);
   }
 
   /* ---------------------------------------------------------------- statistics ---- */
@@ -70,12 +79,11 @@
    *
    * Bins are equal width in log space because the axis is logarithmic, so each covers
    * the same distance on screen. */
-  const BINS = 21;
-  const MIN_BIN = 12;          // below this a bin's average is noise, so the line breaks
+  const BINS = CONF.bins;
+  const MIN_BIN = CONF.minBin;  // below this a bin's average is noise, so the line breaks
 
   function binIndex(x) {
-    return Math.min(BINS - 1, Math.max(0,
-      Math.floor(((Math.log10(clampX(x)) - LX0) / (LX1 - LX0)) * BINS)));
+    return Math.min(BINS - 1, Math.max(0, Math.floor(tx(x) * BINS)));
   }
 
   function curveOf(rows) {
@@ -88,12 +96,11 @@
     }
     const bins = [];
     for (let b = 0; b < BINS; b++) {
-      const w = (LX1 - LX0) / BINS;
       bins.push({
         b,
-        x0: Math.pow(10, LX0 + b * w),
-        x1: Math.pow(10, LX0 + (b + 1) * w),
-        mid: Math.pow(10, LX0 + (b + 0.5) * w),
+        x0: itx(b / BINS),
+        x1: itx((b + 1) / BINS),
+        mid: itx((b + 0.5) / BINS),
         n: counts[b],
         mean: counts[b] ? sums[b] / counts[b] : null,
         enough: counts[b] >= MIN_BIN,
@@ -108,15 +115,15 @@
   function curveAt(bins, x) {
     const usable = bins.filter((b) => b.enough);
     if (!usable.length) return null;
-    const lx = Math.log10(clampX(x));
-    if (lx <= Math.log10(usable[0].mid)) return usable[0].mean;
+    const lx = tx(x);
+    if (lx <= tx(usable[0].mid)) return usable[0].mean;
     const last = usable[usable.length - 1];
-    if (lx >= Math.log10(last.mid)) return last.mean;
+    if (lx >= tx(last.mid)) return last.mean;
     for (let i = 0; i < usable.length - 1; i++) {
       const a = usable[i], c = usable[i + 1];
       // Adjacent in the list but not on the chart: the line is broken across the gap.
       if (c.b !== a.b + 1) continue;
-      const la = Math.log10(a.mid), lc = Math.log10(c.mid);
+      const la = tx(a.mid), lc = tx(c.mid);
       if (lx >= la && lx <= lc) return a.mean + ((lx - la) / (lc - la)) * (c.mean - a.mean);
     }
     return null;
@@ -186,7 +193,7 @@
 
     ctx.textAlign = "center";
     ctx.textBaseline = "top";
-    for (const t of [1, 3, 10, 30, 100, 300, 1000]) {
+    for (const t of CONF.ticks) {
       const px = Math.round(sx(t)) + 0.5;
       ctx.beginPath();
       ctx.moveTo(px, PAD.t);
@@ -196,13 +203,13 @@
     }
 
     ctx.fillStyle = cssVar("--text-secondary");
-    ctx.fillText("Residents per hectare (log scale)", PAD.l + p.w / 2, H - 16);
+    ctx.fillText(CONF.xLabel, PAD.l + p.w / 2, H - 16);
     ctx.save();
     ctx.translate(13, PAD.t + p.h / 2);
     ctx.rotate(-Math.PI / 2);
     ctx.textAlign = "center";
     ctx.textBaseline = "top";
-    ctx.fillText("Street trees per 100 m", 0, 0);
+    ctx.fillText(CONF.yLabel, 0, 0);
     ctx.restore();
 
     // ---- points. Greyed rather than dropped when a municipality is isolated, so the
@@ -298,14 +305,15 @@
     const x = xAt(hoverX);
     const bin = bins[binIndex(x)];
     const scope = isolated < 0 ? "across the city" : `in ${pretty(munis[isolated])}`;
-    const range = `${num(bin.x0, bin.x0 < 10 ? 1 : 0)}\u2013${num(bin.x1, bin.x1 < 10 ? 1 : 0)}`;
+    const d = CONF.xDecimals;
+    const range = `${num(bin.x0, d)}\u2013${num(bin.x1, d)}`;
     tip.innerHTML =
-      `<div class="tip-head">${num(x, x < 10 ? 1 : 0)} residents per hectare</div>`
+      `<div class="tip-head">${num(x, d)} ${esc(CONF.xUnit)}</div>`
       + `<div class="popup-row"><span class="k">Average here</span>`
       + `<span class="v">${num(hoverY, 1)} per 100 m</span></div>`
       + `<div class="popup-row"><span class="k">Areas in this bin</span>`
       + `<span class="v">${num(bin.n)}</span></div>`
-      + `<div class="tip-note">bin covers ${range} residents per hectare, ${scope}</div>`;
+      + `<div class="tip-note">bin covers ${range} ${esc(CONF.xUnit)}, ${scope}</div>`;
     tip.hidden = false;
     const left = Math.min(W - tip.offsetWidth - 8, Math.max(8, sx(x) + 14));
     tip.style.left = `${left}px`;
@@ -366,15 +374,23 @@
   function renderHeadline() {
     const rows = active();
     const bins = curveOf(rows).filter((b) => b.enough);
-    const peak = bins.length ? bins.reduce((a, b) => (b.mean > a.mean ? b : a)) : null;
-    const densest = bins.length ? bins[bins.length - 1] : null;
+    const last = bins.length ? bins[bins.length - 1] : null;
+    const highest = bins.length ? bins.reduce((a, b) => (b.mean > a.mean ? b : a)) : null;
+    /* The middle tile is the curve's peak, unless the peak is the end of the line and
+     * would just restate the tile beside it -- then the opening bin is the useful
+     * comparison, since what the reader wants is both ends of the curve. */
+    const peak = highest && last && highest.b === last.b ? bins[0] : highest;
+    const peakIsStart = peak && bins.length && peak.b === bins[0].b;
     const stats = [
       [num(rows.length), "Census areas"],
       [num(median(rows.map((r) => r.y)), 1), "Median trees per 100 m"],
       [peak ? num(peak.mean, 1) : "–",
-       peak ? `Peak average, near ${num(peak.mid, peak.mid < 10 ? 1 : 0)}/ha` : "Peak average"],
-      [densest ? num(densest.mean, 1) : "–",
-       densest ? `Densest bin, ${num(densest.x0)}+/ha` : "Densest bin"],
+       !peak ? "Peak average"
+             : peakIsStart
+               ? `First bin, under ${num(peak.x1, CONF.xDecimals)} ${CONF.xShort}`
+               : `Peak average, near ${num(peak.mid, CONF.xDecimals)} ${CONF.xShort}`],
+      [last ? num(last.mean, 1) : "–",
+       last ? `Top bin, ${num(last.x0, CONF.xDecimals)}+ ${CONF.xShort}` : "Top bin"],
     ];
     el("stats").innerHTML = stats.map(([v, l]) =>
       `<div class="stat-tile"><div class="stat-value">${v}</div>`
@@ -398,7 +414,8 @@
       el("chart-pane").appendChild(box);
       return;
     }
-    points = payload.points;
+    points = payload.points.map((p) => Object.assign({}, p, { x: p[CONF.xKey] }))
+      .filter((p) => p.x != null);
     munis = payload.municipalities;
 
     canvas = el("chart");
@@ -425,7 +442,27 @@
     if (dark.addEventListener) dark.addEventListener("change", () => { renderLegend(); renderTable(); draw(); });
 
     if (window.SheetPanel) SheetPanel.setup({ onResize: resize });
+    const park = payload.parking || {};
     const facts = {
+      permits: () => num(park.permits),
+      spaces: () => num(park.spaces),
+      placedPct: () => `${num((park.placed / park.spaces) * 100, 1)}%`,
+      frontYard: () => num(park.by_type && park.by_type["Front Yard"]),
+      widened: () => num(park.by_type && park.by_type["Widened Driveway"]),
+      boulevard: () => num(park.by_type && park.by_type["Boulevard Parking"]),
+      noneAreas: () => num(park.areas_with_none),
+      // The three former municipalities whose bylaws created the permit in the first
+      // place, as a share of every licensed space placed on the map.
+      oldCityShare: () => {
+        const old = new Set(["TORONTO", "YORK", "EAST YORK"]);
+        let a = 0, b = 0;
+        for (const q of points) {
+          b += q.spaces || 0;
+          if (old.has(munis[q.m])) a += q.spaces || 0;
+        }
+        return b ? `${num((a / b) * 100, 0)}%` : "–";
+      },
+      nonePct: () => `${num((park.areas_with_none / points.length) * 100, 0)}%`,
       overY: () => num(points.filter((q) => q.y > Y_MAX).length),
       yMax: () => num(Y_MAX),
       overX: () => num(points.filter((q) => q.x > X_MAX).length),

@@ -200,7 +200,8 @@ def main() -> None:
     pts = con.execute(
         """
         SELECT m.dauid, m.municipality, m.people_per_ha, m.trees_per_100m,
-               m.population, m.tree_count, m.area_ha, m.street_m, w.ward_name
+               m.population, m.tree_count, m.area_ha, m.street_m, w.ward_name,
+               m.parking_per_100m, m.parking_spaces
         FROM da_metrics m
         LEFT JOIN (
             SELECT a.dauid, mode(t.ward_name) AS ward_name
@@ -209,17 +210,33 @@ def main() -> None:
         ) w USING (dauid)
         WHERE m.trees_per_100m IS NOT NULL
           AND m.municipality IS NOT NULL
-          -- Density is plotted on a log axis, where nobody-lives-here has no place:
-          -- an area with no residents is not at the low end of the scale, it is off it.
-          AND m.population > 0
         ORDER BY m.people_per_ha
         """
     ).fetchall()
+    parking_types = dict(con.execute(
+        "SELECT parking_type, sum(spaces) FROM geo.front_yard_parking GROUP BY 1"
+        " ORDER BY 2 DESC").fetchall())
+    permits, spaces, placed_spaces = con.execute(
+        """SELECT (SELECT count(*) FROM geo.front_yard_parking),
+                  (SELECT sum(spaces) FROM geo.front_yard_parking),
+                  (SELECT sum(spaces) FROM geo.parking_segment)"""
+    ).fetchone()
     scatter = {
         "municipalities": muni_names,
+        "parking": {
+            "permits": permits, "spaces": int(spaces),
+            "placed": int(placed_spaces), "by_type": parking_types,
+            "areas_with_none": con.execute(
+                "SELECT count(*) FROM da_metrics WHERE parking_per_100m = 0").fetchone()[0],
+        },
         "points": [
-            {"id": r[0], "m": muni_ix[r[1]], "x": r[2], "y": r[3], "pop": r[4],
-             "n": r[5], "ha": r[6], "street": int(r[7]), "ward": r[8]}
+            # x is null for an area with no residents: density is drawn on a log axis
+            # where nobody-lives-here has no place, and the page drops the row. The
+            # parking page reads its own field and keeps it.
+            {"id": r[0], "m": muni_ix[r[1]],
+             "x": r[2] if (r[4] or 0) > 0 else None, "y": r[3], "pop": r[4],
+             "n": r[5], "ha": r[6], "street": int(r[7]), "ward": r[8],
+             "park": r[9], "spaces": r[10]}
             for r in pts
         ],
     }

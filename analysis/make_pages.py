@@ -18,6 +18,7 @@ NAV = [
     ("streets.html", "Trees per 100 m"),
     ("people.html", "Trees per resident"),
     ("density.html", "Density vs planting"),
+    ("parking.html", "Front-yard parking"),
     ("../", "← All 688,335 trees"),
 ]
 

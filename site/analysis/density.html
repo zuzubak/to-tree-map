@@ -52,6 +52,7 @@
             <a href="streets.html">Trees per 100 m</a>
             <a href="people.html">Trees per resident</a>
             <a href="density.html" aria-current="page">Density vs planting</a>
+            <a href="parking.html">Front-yard parking</a>
           </nav>
           <p class="an-subtitle">
             Every census area in Toronto, plotted by how many people live on a hectare
@@ -190,6 +191,23 @@
   </div>
 
   <script src="../panel.js"></script>
+  <script>
+    window.SCATTER = {
+      xKey: "x",
+      xScale: "log",
+      xMin: 1,
+      xMax: 1000,
+      ticks: [1, 3, 10, 30, 100, 300, 1000],
+      xLabel: "Residents per hectare (log scale)",
+      xUnit: "residents per hectare",
+      xShort: "/ha",
+      xDecimals: 0,
+      yMax: 45,
+      yLabel: "Street trees per 100 m",
+      bins: 21,
+      minBin: 12,
+    };
+  </script>
   <script src="scatter.js"></script>
 
   <!-- Pageview counts only (GoatCounter): no cookies, so no consent banner needed. -->

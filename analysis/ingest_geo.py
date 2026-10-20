@@ -19,7 +19,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import requests  # noqa: E402
 
 from utils import DATA, METRIC_CRS, WGS84  # noqa: E402
-from utils.ckan import package_show  # noqa: E402
+from utils.ckan import datastore_pages, package_show  # noqa: E402
 from utils.census import da_population, download as download_census  # noqa: E402
 from utils.geo import MAX_SNAP_M, STREET_CLASSES  # noqa: E402
 from utils.warehouse import connect  # noqa: E402
@@ -56,6 +56,8 @@ def fetch_centreline() -> Path:
 
 MUNI_FILE = DATA / "former_municipalities.geojson"
 MUNI_PACKAGE = "former-municipality-boundaries"
+# "Residential Front Yard Parking", the datastore-active CSV resource.
+PARKING_RESOURCE = "07225fdb-6f0f-428b-a4a8-b5c05abfca69"
 
 
 def fetch_municipalities() -> Path:
@@ -94,6 +96,12 @@ def main() -> None:
             CAST(CENTRELINE_ID AS BIGINT)        AS centreline_id,
             LINEAR_NAME_FULL                     AS street_name,
             FEATURE_CODE_DESC                    AS street_class,
+            -- Address ranges per side. These are what place a street address on a
+            -- block without needing the 590 MB address-point file.
+            TRY_CAST(LO_NUM_L AS INT)            AS lo_num_l,
+            TRY_CAST(HI_NUM_L AS INT)            AS hi_num_l,
+            TRY_CAST(LO_NUM_R AS INT)            AS lo_num_r,
+            TRY_CAST(HI_NUM_R AS INT)            AS hi_num_r,
             {metric('geom')}                     AS geom_m,
             st_length({metric('geom')})          AS length_m,
             geom                                 AS geom_wgs
@@ -333,6 +341,68 @@ def main() -> None:
     print(f"  snapped to a street segment: {got:,} of {total:,} ({got/total*100:.1f}%), "
           f"median {med:.0f} m from the centreline")
 
+    # ---- licensed front-yard parking --------------------------------------------
+    #
+    # The City licenses parking on residential front land: front yards, widened
+    # driveways and boulevards. Records carry a street number and name but no
+    # coordinates, so each is placed on the block whose address range contains it --
+    # which the centreline already publishes per side, so no address-point file is
+    # needed. Where ranges overlap, the tightest wins.
+    print("Front-yard parking")
+    rows = []
+    for page in datastore_pages(PARKING_RESOURCE):
+        rows.extend(page)
+    con.execute("DROP TABLE IF EXISTS geo.front_yard_parking")
+    con.execute(
+        """CREATE TABLE geo.front_yard_parking
+           (street_no VARCHAR, street_name VARCHAR, spaces INT, parking_type VARCHAR)"""
+    )
+    con.executemany(
+        "INSERT INTO geo.front_yard_parking VALUES (?, ?, ?, ?)",
+        [(r["STREETNO"], r["STREETNAME"], r["LICENSED_SPACES"], r["PARKING_TYPE"])
+         for r in rows],
+    )
+    con.execute("DROP TABLE IF EXISTS geo.parking_segment")
+    con.execute(
+        f"""
+        CREATE TABLE geo.parking_segment AS
+        WITH p AS (
+            SELECT rowid AS pid, {norm.format(c='street_name')} AS nm,
+                   TRY_CAST(regexp_extract(street_no, '^[0-9]+') AS INT) AS addr_no,
+                   spaces, parking_type
+            FROM geo.front_yard_parking
+        ),
+        s AS (
+            SELECT centreline_id, {norm.format(c='street_name')} AS nm,
+                   lo_num_l, hi_num_l, lo_num_r, hi_num_r
+            FROM geo.street_segments
+        ),
+        hit AS (
+            SELECT p.pid, p.spaces, p.parking_type, s.centreline_id,
+                   least(coalesce(s.hi_num_l - s.lo_num_l, 1e9),
+                         coalesce(s.hi_num_r - s.lo_num_r, 1e9)) AS span,
+                   row_number() OVER (
+                       PARTITION BY p.pid
+                       ORDER BY least(coalesce(s.hi_num_l - s.lo_num_l, 1e9),
+                                      coalesce(s.hi_num_r - s.lo_num_r, 1e9))
+                   ) AS rn
+            FROM p JOIN s USING (nm)
+            WHERE p.addr_no IS NOT NULL
+              AND ((p.addr_no BETWEEN s.lo_num_l AND s.hi_num_l)
+                OR (p.addr_no BETWEEN s.lo_num_r AND s.hi_num_r))
+        )
+        SELECT pid, centreline_id, spaces, parking_type FROM hit WHERE rn = 1
+        """
+    )
+    placed, spaces, total, total_spaces = con.execute(
+        """SELECT count(*), sum(spaces),
+                  (SELECT count(*) FROM geo.front_yard_parking),
+                  (SELECT sum(spaces) FROM geo.front_yard_parking)
+           FROM geo.parking_segment"""
+    ).fetchone()
+    print(f"  {placed:,} of {total:,} permits placed on a block "
+          f"({placed/total*100:.1f}%), {spaces:,} of {total_spaces:,} licensed spaces")
+
     # ---- what each census area is and how much street it holds ------------------
     #
     # The scatter plots one point per census area, so both of its axes have to be
@@ -359,18 +429,37 @@ def main() -> None:
         SELECT dauid, municipality FROM overlap WHERE rn = 1
         """
     )
-    con.execute("DROP TABLE IF EXISTS geo.segment_area")
+    con.execute("DROP TABLE IF EXISTS geo.segment_area_part")
     con.execute(
         """
-        CREATE TABLE geo.segment_area AS
+        CREATE TABLE geo.segment_area_part AS
         -- Clipped to the boundary, not assigned whole: a street running along the edge
         -- between two areas belongs half to each, and assigning it to whichever side
         -- its midpoint fell on would hand one area a free kilometre and charge the
         -- other for nothing.
-        SELECT a.dauid, sum(st_length(st_intersection(s.geom_m, a.geom_m))) AS street_m
+        SELECT s.centreline_id, a.dauid,
+               st_length(st_intersection(s.geom_m, a.geom_m)) AS m
         FROM geo.street_segments s
         JOIN geo.dissemination_areas a ON st_intersects(s.geom_m, a.geom_m)
-        GROUP BY 1
+        """
+    )
+    con.execute("DROP TABLE IF EXISTS geo.segment_area")
+    con.execute(
+        """CREATE TABLE geo.segment_area AS
+           SELECT dauid, sum(m) AS street_m FROM geo.segment_area_part GROUP BY 1"""
+    )
+    con.execute("DROP TABLE IF EXISTS geo.segment_da")
+    con.execute(
+        """
+        -- A single home area per block, for things counted at an address rather than
+        -- measured along the kerb: a parking permit sits at one house, so it belongs to
+        -- one area, and that is the area holding most of its block.
+        CREATE TABLE geo.segment_da AS
+        SELECT centreline_id, dauid FROM (
+            SELECT centreline_id, dauid,
+                   row_number() OVER (PARTITION BY centreline_id ORDER BY m DESC) AS rn
+            FROM geo.segment_area_part
+        ) WHERE rn = 1
         """
     )
     km, areas, unplaced = con.execute(

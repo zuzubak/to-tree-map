@@ -24,3 +24,7 @@ sources:
       - name: former_municipalities
       - name: da_municipality
       - name: segment_area
+      - name: segment_area_part
+      - name: segment_da
+      - name: front_yard_parking
+      - name: parking_segment
