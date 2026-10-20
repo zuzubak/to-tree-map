@@ -1,0 +1,154 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Toronto Street Tree Density</title>
+  <meta name="description" content="An interactive map of how densely Toronto's streets are planted: street trees per 100 metres of street, for every one of the city's 43,000 blocks.">
+  <link rel="canonical" href="https://malcolmkennedy.com/to-tree-map/analysis/streets.html">
+
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="Malcolm Kennedy">
+  <meta property="og:url" content="https://malcolmkennedy.com/to-tree-map/analysis/streets.html">
+  <meta property="og:title" content="Toronto Street Tree Density">
+  <meta property="og:description" content="An interactive map of how densely Toronto's streets are planted: street trees per 100 metres of street, for every one of the city's 43,000 blocks.">
+  <meta name="twitter:card" content="summary">
+
+  <meta name="theme-color" content="#ffffff">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+  <link rel="stylesheet" href="../style.css">
+  <link rel="stylesheet" href="analysis.css">
+</head>
+<body data-ramp="street">
+<script src="/header.js"></script>
+  <div class="app">
+    <main id="map-pane">
+      <div id="map"></div>
+      <div id="search" class="map-search"></div>
+      <div class="tree-tip" id="tip" hidden></div>
+      <div class="map-badge" id="loading-badge">
+        <span class="spinner" aria-hidden="true"></span>
+        <span>Loading 43,000 blocks&hellip;</span>
+      </div>
+    </main>
+
+    <aside class="panel" id="panel">
+      <div class="panel-handle-row">
+        <button class="panel-drag-handle" id="panel-toggle" aria-label="Toggle panel" aria-expanded="false">
+          <span class="handle-bar"></span>
+          <span class="handle-label">Stats &amp; legend</span>
+        </button>
+        <button class="panel-hide-btn" id="panel-hide" aria-label="Hide panel and show map">
+          Hide &#9660;
+        </button>
+      </div>
+
+      <div class="panel-scroll">
+        <header class="panel-header">
+          <h1>Street trees per 100 m of street</h1>
+          <nav class="an-nav" aria-label="Analyses"><a href="age.html">Estimated age</a><a href="streets.html" aria-current="page">Trees per 100 m</a><a href="people.html">Trees per resident</a><a href="../">← All 688,335 trees</a></nav>
+          <p class="an-subtitle">Trees counted against the length of street they stand on, block by block, across 5,596 km of Toronto streets.</p>
+          <div class="stats" id="stats"></div>
+        </header>
+
+        <div class="an-section">
+          <h2 id="legend-unit"></h2>
+          <div class="ramp-legend" id="legend"></div>
+          <p class="an-note">
+            Five classes, cut at quintiles, so each holds about the same number of
+            blocks. The breaks are printed because that makes the class widths
+            uneven &mdash; the alternative, equal widths, would put most of the city in
+            one colour to leave room for a handful of extremes.
+          </p>
+        </div>
+
+        <div class="an-section">
+          <h2>Distribution</h2>
+          <div id="panel-chart"></div>
+        </div>
+
+        <div class="an-section">
+          <h2>How this is measured</h2>
+          <p class="an-note">
+            Each line is one <strong>centreline segment</strong> &mdash; one block of
+            one street, between intersections. Every tree in the inventory is snapped to
+            the nearest segment carrying its street name, and the count is divided by
+            the block's own length.
+          </p>
+          <p class="an-note">
+            Expressways and their ramps are excluded: they are grade-separated
+            through-routes, never street-tree frontage, and leaving them in would stripe
+            the map with false zeroes along the 401, the DVP and the Gardiner. Blocks
+            shorter than 20 m are left out too &mdash; a 6 m connector with two trees is
+            not 33 trees per 100 m of streetscape.
+          </p>
+        </div>
+
+        <div class="an-section">
+          <h2>What this cannot tell you</h2>
+          <p class="an-note">
+            <strong>A zero is not proof of a bare street.</strong> This is the City's
+            inventory of <em>street</em> trees: trees on private front lawns, in parks
+            and on institutional land are not in it, so a leafy street of deep private
+            gardens can read as empty here.
+          </p>
+          <p class="an-note">
+            31,809 trees &mdash; 4.6% &mdash; could not be matched to any segment within
+            60 m of a street of their recorded name, and are missing from the counts.
+          </p>
+          <p class="an-note">
+            Trees are counted per block, not per side, so a one-sided planting and a
+            two-sided one of the same density are indistinguishable.
+          </p>
+        </div>
+
+        <p class="an-note" id="as-of"></p>
+      </div>
+    </aside>
+  </div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="../basemap.js"></script>
+  <script src="../panel.js"></script>
+  <script src="/map-search.js"></script>
+  <!-- Written at deploy time from the CARTO_API_KEY secret; absent locally, which is fine. -->
+  <script src="../config.js"></script>
+  <script>
+    window.ANALYSIS = {
+      source: "streets",
+      metric: "per100",
+      decimals: 1,
+      unit: "Street trees per 100 m",
+      unitShort: "per 100 m",
+      tipLabel: "Trees per 100 m",
+      // A fifth of the city's blocks have no inventoried street tree at all. That is a
+      // different statement from "fewer than most", so it gets its own class instead of
+      // the pale bottom of a ramp -- and it keeps the quintiles off a break of zero.
+      zeroClass: true,
+      zeroLabel: "No street trees",
+      nullLabel: "Too short to rate",
+      chart: "metric",
+      credit: "Trees: <a href=\"https://open.toronto.ca/dataset/street-tree-data/\">City of Toronto</a>",
+      dist: ({ summary }) => ({
+        bin: 2.5,
+        cap: 40,
+        median: summary.median_per_100m,
+        axis: ["0", "20", "40+ per 100 m"],
+        note: "Every block, by how densely it is planted. The spike at zero is the "
+            + "9,268 blocks with no inventoried street tree at all.",
+      }),
+      stats: ({ summary, compact, num }) => [
+        [num(summary.median_per_100m, 1), "Median per 100 m"],
+        [compact(summary.trees), "Trees placed"],
+        [compact(summary.km) + " km", "Street measured"],
+        [compact(summary.segments), "Blocks mapped"],
+      ],
+    };
+  </script>
+  <script src="analysis.js"></script>
+
+  <!-- Pageview counts only (GoatCounter): no cookies, so no consent banner needed. -->
+  <script data-goatcounter="https://zuzubak.goatcounter.com/count"
+          async src="//gc.zgo.at/count.js"></script>
+</body>
+</html>

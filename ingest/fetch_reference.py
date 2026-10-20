@@ -16,8 +16,8 @@ from pathlib import Path
 
 import duckdb
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))
-from ckan_client import datastore_pages  # noqa: E402
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from utils.ckan import datastore_pages  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[1]
 DB_PATH = ROOT / "data" / "warehouse.duckdb"

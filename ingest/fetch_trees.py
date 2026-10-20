@@ -26,8 +26,8 @@ from pathlib import Path
 import duckdb
 import requests
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))
-from ckan_client import TIMEOUT_SECONDS, datastore_pages, package_show  # noqa: E402
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from utils.ckan import TIMEOUT_SECONDS, datastore_pages, package_show  # noqa: E402
 
 PACKAGE_ID = "street-tree-data"
 RESOURCE_ID = "3dafa392-c6ab-4f37-9bf9-21ddf7308eaf"  # datastore mirror, for the fallback path

@@ -1,0 +1,91 @@
+taxon,rank,growth_factor,basis,note
+Abies concolor,species,7.5,isa,White fir
+Acer negundo,species,3.0,isa,Box elder / Manitoba maple
+Acer nigrum,species,5.0,isa,Black maple
+Acer platanoides,species,4.5,isa,Norway maple
+Acer rubrum,species,4.5,isa,Red maple
+Acer saccharinum,species,3.0,isa,Silver maple
+Acer saccharum,species,5.5,isa,Sugar maple
+Aesculus flava,species,5.0,isa,Yellow buckeye
+Aesculus hippocastanum,species,8.0,isa,Common horsechestnut
+Betula nigra,species,3.5,isa,River birch
+Betula papyrifera,species,5.0,isa,White birch
+Betula pendula,species,5.0,isa,European white birch
+Carya ovata,species,7.5,isa,Shagbark hickory
+Cercis canadensis,species,7.0,isa,Redbud
+Cornus florida,species,7.0,isa,Flowering dogwood
+Fagus grandifolia,species,6.0,isa,American beech
+Fagus sylvatica,species,4.0,isa,European beech
+Fraxinus americana,species,5.0,isa,White ash
+Fraxinus pennsylvanica,species,4.0,isa,Green ash
+Gleditsia triacanthos,species,3.0,isa,Honey locust
+Gymnocladus dioicus,species,3.0,isa,Kentucky coffeetree
+Liquidambar styraciflua,species,4.0,isa,Sweetgum
+Liriodendron tulipifera,species,3.0,isa,Tulip tree
+Ostrya virginiana,species,7.0,isa,Ironwood / hop hornbeam
+Picea abies,species,5.0,isa,Norway spruce
+Picea pungens,species,4.5,isa,Colorado blue spruce
+Pinus nigra,species,4.5,isa,Austrian pine
+Pinus resinosa,species,5.5,isa,Red pine
+Pinus strobus,species,5.0,isa,Eastern white pine
+Pinus sylvestris,species,3.5,isa,Scots pine
+Platanus occidentalis,species,4.0,isa,American sycamore
+Populus deltoides,species,2.0,isa,Eastern cottonwood
+Populus tremuloides,species,2.0,isa,Quaking aspen
+Prunus serotina,species,5.0,isa,Black cherry
+Pseudotsuga menziesii,species,5.0,isa,Douglas fir
+Quercus alba,species,5.0,isa,White oak
+Quercus coccinea,species,4.0,isa,Scarlet oak
+Quercus imbricaria,species,6.0,isa,Shingle oak
+Quercus palustris,species,3.0,isa,Pin oak
+Quercus rubra,species,4.0,isa,Northern red oak
+Quercus shumardii,species,3.0,isa,Shumard oak
+Salix nigra,species,2.0,isa,Black willow
+Tilia americana,species,3.0,isa,American basswood
+Tilia cordata,species,3.0,isa,Littleleaf linden
+Ulmus americana,species,4.0,isa,American elm
+Juglans nigra,species,4.5,isa,Black walnut
+Acer,genus,4.5,genus_median,Median of the ISA maples in this inventory
+Quercus,genus,4.0,genus_median,Median of the ISA oaks in this inventory
+Pinus,genus,4.75,genus_median,Median of the ISA pines in this inventory
+Picea,genus,4.75,genus_median,Median of the ISA spruces in this inventory
+Betula,genus,5.0,genus_median,Median of the ISA birches in this inventory
+Fraxinus,genus,4.5,genus_median,Median of the ISA ashes in this inventory
+Tilia,genus,3.0,genus_median,Both ISA lindens are 3.0
+Populus,genus,2.0,genus_median,Both ISA poplars are 2.0
+Fagus,genus,5.0,genus_median,Mean of American and European beech
+Aesculus,genus,6.5,genus_median,Mean of horsechestnut and yellow buckeye
+Ulmus,genus,4.0,genus_median,From American elm
+Salix,genus,2.0,genus_median,From black willow
+Platanus,genus,4.0,genus_median,From American sycamore
+Prunus,genus,5.0,genus_median,From black cherry
+Juglans,genus,4.5,genus_median,From black walnut
+Carya,genus,7.5,genus_median,From shagbark hickory
+Cornus,genus,7.0,genus_median,From flowering dogwood
+Abies,genus,5.0,rule_of_thumb,ISA lists only white fir at 7.5; balsam fir grows faster
+Gingko,genus,5.0,rule_of_thumb,Placeholder guarding a known misspelling
+Ginkgo,genus,5.0,rule_of_thumb,Slow to moderate in street conditions
+Syringa,genus,6.0,rule_of_thumb,Small ornamental; little diameter per year
+Malus,genus,6.0,rule_of_thumb,Small ornamental crabapple
+Pyrus,genus,4.0,rule_of_thumb,Fast early growth then slowing
+Amelanchier,genus,6.0,rule_of_thumb,Small multi-stemmed understorey tree
+Crataegus,genus,6.5,rule_of_thumb,Small and slow
+Sorbus,genus,5.0,rule_of_thumb,Small and short-lived
+Celtis,genus,4.0,rule_of_thumb,Moderate; similar habit to elm
+Catalpa,genus,3.0,rule_of_thumb,Fast and coarse
+Thuja,genus,6.0,rule_of_thumb,Slow in diameter
+Juniperus,genus,6.5,rule_of_thumb,Very slow in diameter
+Taxus,genus,8.0,rule_of_thumb,Among the slowest-thickening trees here
+Tsuga,genus,6.0,rule_of_thumb,Slow-growing shade tolerant conifer
+Larix,genus,4.0,rule_of_thumb,Moderate
+Robinia,genus,3.0,rule_of_thumb,Fast early growth
+Morus,genus,3.0,rule_of_thumb,Fast
+Zelkova,genus,4.0,rule_of_thumb,Moderate; elm relative
+Magnolia,genus,5.0,rule_of_thumb,Moderate
+Gleditsia,genus,3.0,genus_median,From honey locust
+Liriodendron,genus,3.0,genus_median,From tulip tree
+Liquidambar,genus,4.0,genus_median,From sweetgum
+Gymnocladus,genus,3.0,genus_median,From Kentucky coffeetree
+Ostrya,genus,7.0,genus_median,From ironwood
+Cercis,genus,7.0,genus_median,From redbud
+Pseudotsuga,genus,5.0,genus_median,From Douglas fir

@@ -43,12 +43,21 @@ jobs:
       - name: Fetch ward boundaries
         run: python ingest/fetch_reference.py
 
+      # Street network, census geography and the tree-to-geography joins the three
+      # analysis maps are built on. The centreline download is cached between runs by
+      # the step's own check; the census table is a fixed 2021 file.
+      - name: Build analysis geography
+        run: python analysis/ingest_geo.py
+
       - name: dbt build
         working-directory: dbt
         run: dbt build --profiles-dir .
 
       - name: Export the map payload
         run: python export/export_map_data.py
+
+      - name: Export the analysis payloads
+        run: python analysis/export_analysis.py
 
       - name: Check the payload is complete
         run: python export/check_payload.py

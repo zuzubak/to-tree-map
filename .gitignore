@@ -11,6 +11,10 @@ __pycache__/
 data/*.duckdb
 data/*.duckdb.wal
 data/*.csv
+# Downloaded inputs for the analysis maps: a 93 MB street centreline and the 2021
+# census table. Both are re-fetched by the same workflow.
+data/*.geojson
+data/*.zip
 site/data/
 
 dbt/target/

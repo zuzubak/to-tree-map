@@ -27,16 +27,27 @@ shape: Python ingest → DuckDB → dbt → static export → a Leaflet map on G
 - Links are shareable: the URL hash carries the view, and a selected tree is addressed by
   coordinate rather than row number so the link survives a data refresh.
 
+Three further maps analyse the same inventory block by block — [estimated
+age](site/analysis/age.html), [trees per 100 m of street](site/analysis/streets.html) and
+[trees per 1,000 residents](site/analysis/people.html). Click any block for the age
+distribution behind its median. See [The three analysis maps](#the-three-analysis-maps).
+
 ## How it works
 
 ```
+utils/     -> shared Python: warehouse connection, CRS constants, the CKAN client,
+              the street-class filter, the census reader
 ingest/    -> pulls the Street Tree Data inventory and ward boundaries from Toronto Open
               Data into DuckDB
+analysis/  -> pulls the street centreline and 2021 census population, snaps every tree to
+              a street segment and a census area, and exports the three analysis payloads
 dbt/       -> parses the City's free-text botanical names into genus/species/cultivar,
-              joins the curated native-status list, and rolls up per-taxon and per-ward stats
-              (dbt/seeds/ holds the three hand-curated reference tables)
+              joins the curated native-status list, and rolls up per-taxon, per-ward,
+              per-segment and per-area stats
+              (dbt/seeds/ holds the four hand-curated reference tables)
 export/    -> writes the marts out as gzipped binary columns + one metadata JSON
 site/      -> a Leaflet map with a Canvas2D overlay that draws all 688k points
+site/analysis/ -> three choropleths over the same shared stylesheet and basemap
 ```
 
 A GitHub Actions workflow (`.github/workflows/refresh.yml`) runs the whole chain weekly and
@@ -218,6 +229,91 @@ running the numbers rather than eyeballing them:
 
 Trunk size uses a single-hue sequential ramp whose lightest step still clears 2:1 against
 the basemap.
+
+## The three analysis maps
+
+Three further maps live under `site/analysis/`, each answering one question about the same
+inventory. They share one engine (`analysis.js`) and differ only in a configuration block,
+because they differ only in which number they colour by.
+
+| Map | Unit | Measure |
+|---|---|---|
+| `age.html` | street block | median estimated age |
+| `streets.html` | street block | trees per 100 m of street |
+| `people.html` | census area | trees per 1,000 residents |
+
+### Estimated age, and why it is only an estimate
+
+The inventory has no planting date, so age comes from the arborist's standard field method:
+**diameter in inches × a growth factor for the species**, where the factor is the average
+years that species takes to add an inch of trunk. `dbt/seeds/growth_factors.csv` carries 90
+of them, each tagged with where it came from, and `tree_age.basis` records which one was
+used for each tree:
+
+- **59.2%** a published species factor (ISA / municipal forestry tables)
+- **20.0%** the median of the species factors within that genus, where the species is not
+  listed
+- **20.7%** a rule of thumb for the genus, where nothing published applies
+
+That provenance is on the page itself, because the three are not equally trustworthy.
+
+Two things to hold onto. The method describes **open-grown landscape trees**, and a street
+tree in a four-foot pit with compacted soil and road salt thickens more slowly, so these
+ages run young on the most stressed sites. And the input is no better than the method:
+recorded diameters heap on round numbers, and **164,966 trees — nearly a quarter of the
+inventory — sit on exactly 4 cm or 8 cm**, a field convention rather than that many
+identical trunks. 343 trees came out older than 250 years (a 203 cm yew, a 250 cm hawthorn)
+and are flagged `plausible = false` and excluded from every aggregate.
+
+It is an estimate shaped like a measurement. The city-wide pattern is the finding; a single
+block is an indication.
+
+### What a "block" is
+
+A centreline segment — one block of one street, between intersections — which is both the
+unit the question is really about and the unit a reader recognises. Apportioning street
+length to polygons instead would have to split every shared boundary street between the two
+blocks facing it, and would answer a blurrier question.
+
+Blocks are named by their cross streets ("Albion Rd, N: Finch Ave, S: Sheppard Ave") from
+two sources, in order:
+
+1. **The centreline's own topology.** A segment sharing an endpoint with a differently-named
+   segment meets it at an intersection, and the endpoint coordinates say which end is north
+   or east. This is the only source that works on a block with no trees on it, which is a
+   fifth of them. It names both ends of 30,601 segments.
+2. **The trees' `cross_street` fields**, which carry the City's own block definition as an
+   unordered pair. The centreline is cut mid-block in places (former municipal boundaries,
+   address range changes) and at such a cut the only neighbour shares the street name, so
+   topology leaves that end unnamed — where it named one end, the other name in the pair is
+   the other end. That adds ~4,500 more, for 78% with both ends named.
+
+### Why census *areas*, not census blocks
+
+Population is only published to dissemination-block level in a file StatCan's firewall will
+not serve to a script, and a block holding four trees produces a ratio that swings wildly on
+one record. Dissemination areas — 3,727 inside Toronto, averaging ~750 residents — come from
+table [98-10-0015](https://www150.statcan.gc.ca/n1/en/catalogue/98100015), and the boundaries
+are dissolved from the block geography once by `analysis/make_da_boundaries.py`, whose output
+is committed.
+
+The measure has a failure mode worth naming: **a high ratio can mean nobody lives there.**
+The extreme is a 1,125-hectare ravine area with 45 residents and 3,828 street trees, which
+scores 85,000 trees per 1,000 people. Quintile classes keep one such area from taking over
+the colour scale, but the top class needs reading with that in mind.
+
+### Snapping trees to streets
+
+`ST_DWithin` over 688k trees × 45k segments does not use DuckDB's RTree and becomes an
+effective cross product — it ran for 23 minutes without finishing. The working approach is a
+name-first join (normalising former-municipality suffixes off both sides) which places 90.4%
+in 41 seconds, then `st_intersects` against a buffered point — which *does* use the index —
+for the remainder, reaching **95.4%** at a median 16.5 m from the centreline. The 31,809
+trees that match no street of their recorded name within 60 m are missing from the density
+counts.
+
+The street-class filter is inherited from an earlier project of mine and revalidated here:
+5,596 km of street against that project's documented 5,605 km, 0.3% apart.
 
 ## Running locally
 

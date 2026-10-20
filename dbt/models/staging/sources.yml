@@ -11,3 +11,13 @@ sources:
         description: Ward code and name, for labelling.
       - name: source_metadata
         description: The City's own last_refreshed stamp plus which ingest route was used.
+
+  - name: geo
+    schema: geo
+    description: Street network, census geography, and the tree-to-geography joins, built by analysis/ingest_geo.py.
+    tables:
+      - name: street_segments
+      - name: dissemination_areas
+      - name: tree_area
+      - name: tree_segment
+      - name: segment_crossings

@@ -1,0 +1,229 @@
+/* The three analysis maps. Everything structural -- the app shell, the bottom sheet,
+ * stat tiles, popups, the hover tip -- comes from ../style.css, which these pages load
+ * first. This file adds only what a choropleth needs: a sequential ramp, a legend that
+ * names its class breaks, and the distribution chart in the panel.
+ *
+ * One hue per page, light to dark, because every one of these maps encodes magnitude:
+ * age, trees per 100 m, trees per resident. No rainbow, no diverging pair -- none of
+ * these measures has a meaningful midpoint that "high" and "low" sit either side of.
+ * The hue differs per page only so the three read as siblings rather than reprints.
+ */
+
+body[data-ramp="age"] {
+  --an-1: #ecd6a4; --an-2: #d9ab66; --an-3: #c58c42; --an-4: #96601f; --an-5: #57330c;
+}
+body[data-ramp="street"] {
+  --an-1: #cbe4c5; --an-2: #9bcd94; --an-3: #6ab46c; --an-4: #3b8c48; --an-5: #1b5428;
+}
+body[data-ramp="people"] {
+  --an-1: #c2dcfa; --an-2: #93bff3; --an-3: #5598e7; --an-4: #2a78d6; --an-5: #0d366b;
+}
+
+body { --an-null: #b4b2aa; }
+
+/* Dark mode is stepped for a dark ground, not flipped: low values recede into the
+   basemap and high values come forward, which is the reverse of the light ramp's
+   direction and the same choice ../style.css already makes for --seq-1..5. */
+@media (prefers-color-scheme: dark) {
+  body[data-ramp="age"] {
+    --an-1: #4a3312; --an-2: #78521d; --an-3: #a8762c; --an-4: #d2a24a; --an-5: #ecc77d;
+  }
+  body[data-ramp="street"] {
+    --an-1: #16401f; --an-2: #27613a; --an-3: #3f8a52; --an-4: #63b374; --an-5: #9ad4a2;
+  }
+  body[data-ramp="people"] {
+    --an-1: #16365f; --an-2: #1f5398; --an-3: #3987e5; --an-4: #6da7ec; --an-5: #b7d3f6;
+  }
+  body { --an-null: #55534d; }
+}
+
+.an-subtitle {
+  margin: 6px 0 0;
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--text-secondary);
+}
+
+/* ---- Legend -------------------------------------------------------------- */
+
+.an-section { margin-top: 20px; }
+
+.an-section h2 {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+  margin: 0 0 8px;
+}
+
+.ramp-legend { display: flex; flex-direction: column; gap: 3px; }
+
+.ramp-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.ramp-row .swatch {
+  width: 22px;
+  height: 11px;
+  border-radius: 2px;
+  flex: none;
+  box-shadow: 0 0 0 1px var(--border);
+}
+
+.ramp-row .range { font-variant-numeric: tabular-nums; flex: 1 1 auto; }
+
+.ramp-row .count {
+  font-variant-numeric: tabular-nums;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+/* ---- Histogram --------------------------------------------------------- */
+
+/* Flex-box bars rather than SVG, following the diameter histogram in ../style.css.
+   An SVG viewBox would scale its own text with the container, so a 10px label renders
+   at whatever the panel width happens to make it; HTML bars keep type at real size. */
+
+.hist { position: relative; }
+
+.hist-bars {
+  display: flex;
+  align-items: flex-end;
+  gap: 1px;
+  height: 48px;
+}
+
+.hist-col {
+  position: relative;
+  flex: 1 1 0;
+  min-width: 1px;
+  height: 100%;
+}
+
+.hist-col i {
+  position: absolute;
+  bottom: 0;
+  display: block;
+  border-radius: 2px 2px 0 0;
+}
+
+/* The reference shape sits full-width behind; the bar in front is inset so both are
+   legible wherever one covers the other. */
+.hist-col i.ghost { left: 0; right: 0; background: var(--text-muted); opacity: 0.2; }
+.hist-col i.bar { left: 2px; right: 2px; background: var(--an-4); }
+
+.hist-rule {
+  position: absolute;
+  top: 0;
+  width: 1px;
+  background: var(--text-primary);
+  opacity: 0.8;
+}
+
+.hist-break {
+  position: absolute;
+  top: 0;
+  width: 1px;
+  background: var(--text-muted);
+  opacity: 0.45;
+}
+
+.hist-axis {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 3px;
+  font-size: 10px;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.hist-key {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 10px;
+  margin-top: 4px;
+  font-size: 10.5px;
+  color: var(--text-muted);
+}
+
+.hist-key span { display: inline-flex; align-items: center; gap: 4px; }
+
+.hist-key i {
+  width: 9px;
+  height: 9px;
+  border-radius: 2px;
+  flex: none;
+}
+
+.hist-key i.bar { background: var(--an-4); }
+.hist-key i.ghost { background: var(--text-muted); opacity: 0.35; }
+.hist-key i.rule { width: 1px; height: 10px; border-radius: 0; background: var(--text-primary); }
+
+/* Matches the dashed break rules drawn over the bars, rather than standing in for
+   them with a solid block of colour. */
+.hist-key i.dash {
+  width: 1px;
+  height: 10px;
+  border-radius: 0;
+  background: none;
+  border-left: 1px dashed var(--text-muted);
+}
+
+.an-chart-note {
+  margin: 5px 0 0;
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--text-muted);
+}
+
+/* ---- Caveats -------------------------------------------------------------- */
+
+.an-note {
+  margin: 8px 0 0;
+  font-size: 11.5px;
+  line-height: 1.55;
+  color: var(--text-muted);
+}
+
+.an-note strong { color: var(--text-secondary); }
+.an-note a { color: inherit; }
+
+.an-provenance {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-top: 6px;
+}
+
+/* ---- Popup -------------------------------------------------------------- */
+
+/* Wider than the tree map's popup because it holds a histogram, which needs enough
+   room that fifteen ten-year bins are each more than a hairline. */
+.leaflet-popup-content { min-width: 236px; }
+
+.popup-hist { margin-top: 8px; }
+.popup-hist .hist-bars { height: 40px; }
+
+.popup-sep {
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px solid var(--gridline);
+}
+
+@media (max-width: 860px) {
+  .leaflet-popup-content { min-width: 210px; }
+}
+
+/* The cross streets that locate a block, under its street name. */
+.popup-cross {
+  margin: -2px 0 5px;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.tree-tip .tip-cross { color: var(--text-muted); }

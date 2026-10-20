@@ -48,6 +48,12 @@
       <div class="panel-scroll">
         <header class="panel-header">
           <h1>Toronto Street Tree Map</h1>
+          <nav class="an-nav" aria-label="Analyses">
+            <a href="./" aria-current="page">All 688,335 trees</a>
+            <a href="analysis/age.html">Estimated age</a>
+            <a href="analysis/streets.html">Trees per 100 m</a>
+            <a href="analysis/people.html">Trees per resident</a>
+          </nav>
           <div class="stats" id="stats"></div>
         </header>
 
@@ -62,6 +68,8 @@
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <!-- Written at deploy time from the CARTO_API_KEY secret; absent locally, which is fine. -->
+  <script src="basemap.js"></script>
+  <script src="panel.js"></script>
   <script src="/map-search.js"></script>
   <script src="config.js"></script>
   <script src="map.js"></script>

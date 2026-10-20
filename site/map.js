@@ -15,49 +15,15 @@
 /* ------------------------------------------------------------------ config ------------ */
 
 const DATA = "data/";
-/* Basemap: CARTO's grey canvas, matching the other maps on the site. Deliberately
- * desaturated -- the right backdrop for a map whose whole payload is coloured dots.
- *
- * CARTO answers unauthenticated requests with an "API KEY REQUIRED" watermark tile (HTTP
- * 200, normal-looking PNG, so it fails silently), and the keyed endpoint is a different
- * shape: under rastertiles/, takes ?key=, and has no {s} subdomain. site/config.js sets
- * the key and is written at deploy time from a repo secret.
- *
- * With no key we fall back to Esri's keyless grey canvas rather than to a watermarked
- * CARTO, so `python -m http.server` in site/ gives a working map with no setup. Esri only
- * serves real tiles to zoom 16, hence the per-source native zoom; the trees stay crisp
- * either way, since they're drawn on a canvas rather than baked into the tiles. */
-const ESRI = {
-  light: "https://services.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}",
-  dark: "https://services.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}",
-};
-const CARTO_ATTRIBUTION =
-  'Basemap &copy; <a href="https://carto.com/attributions">CARTO</a>, ' +
-  '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &middot; ' +
+/* Basemap tiles and the CARTO key dance live in basemap.js, shared with the analysis
+ * pages. The trees stay crisp whichever source is serving, since they are drawn on a
+ * canvas rather than baked into the tiles. */
+const TREE_CREDIT =
   'Trees: <a href="https://open.toronto.ca/dataset/street-tree-data/">City of Toronto</a>';
-const ESRI_ATTRIBUTION =
-  'Basemap &copy; <a href="https://www.esri.com/">Esri</a>, HERE, Garmin, ' +
-  '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &middot; ' +
-  'Trees: <a href="https://open.toronto.ca/dataset/street-tree-data/">City of Toronto</a>';
-
-function basemapSource(dark) {
-  const key = (window.CARTO_API_KEY || "").trim();
-  if (key) {
-    return {
-      url: "https://basemaps.cartocdn.com/rastertiles/" + (dark ? "dark_all" : "light_all") +
-           "/{z}/{x}/{y}{r}.png?key=" + encodeURIComponent(key),
-      attribution: CARTO_ATTRIBUTION,
-      maxNativeZoom: 20,
-    };
-  }
-  return { url: dark ? ESRI.dark : ESRI.light, attribution: ESRI_ATTRIBUTION, maxNativeZoom: 16 };
-}
 
 const TORONTO_CENTER = [43.7, -79.38];
 const DEFAULT_ZOOM = 11;
-/* CARTO serves real raster tiles to z20, so that's where the map stops -- going further
- * would only upscale, which is what made the old Esri basemap go grainy past z16. */
-const MAX_ZOOM = 20;
+const MAX_ZOOM = Basemap.MAX_ZOOM;
 
 /* Above this zoom, trees are drawn as circles scaled by trunk diameter; below it, as
  * 1-2 px dots in a pixel buffer. The crossover is where a viewport holds few enough
@@ -1442,124 +1408,15 @@ function setupMapInteraction() {
   map.on("moveend zoomend", writeHash);
 }
 
-/* Mobile bottom sheet, ported from to-multiplex-map.
- *
- * Draggable via pointer events (mouse + touch in one API). Three snap states --
- * minimized (just the handle), collapsed (the default peek), expanded (full filter
- * access) -- so dragging down from the default has somewhere smaller to land instead of
- * springing back. No-op on desktop, where the panel is a plain sidebar.
- *
- * Taps use a native "click" listener rather than measuring pointer movement: browsers
- * already suppress click after a real drag, which is a far more reliable tap/drag
- * distinction on touch hardware than a hand-rolled pixel threshold.
- *
- * The heights come from window.innerHeight, not CSS vh: on mobile browsers vh is pinned
- * to the LARGEST viewport (as if the address bar were hidden), so a vh-sized sheet
- * overflows the real viewport whenever the address bar is showing.
- */
-const PANEL_MINIMIZED_PX = 56;
-const PANEL_COLLAPSED_VH = 0.42;
-const PANEL_EXPANDED_VH = 0.82;
-const DRAG_MOVE_THRESHOLD = 6;
-
+/* The draggable mobile sheet lives in panel.js, shared with the analysis pages in
+ * the site. All this page adds is what to re-measure once it settles. */
 function setupPanel() {
-  const panel = el("panel");
-  const toggle = el("panel-toggle");
-  const hideBtn = el("panel-hide");
-  const isMobile = () => window.matchMedia("(max-width: 860px)").matches;
-
-  function targetHeight(state) {
-    const vh = window.innerHeight;
-    if (state === "minimized") return PANEL_MINIMIZED_PX;
-    if (state === "expanded") return vh * PANEL_EXPANDED_VH;
-    return vh * PANEL_COLLAPSED_VH;
-  }
-
-  function setState(state) {
-    panel.dataset.state = state;
-    toggle.setAttribute("aria-expanded", String(state === "expanded"));
-    // Desktop's sidebar is full-height CSS, not state-driven -- an inline max-height
-    // would clamp it regardless of viewport width (inline styles aren't scoped by media
-    // query), so only touch it on mobile.
-    if (isMobile() && !panel.classList.contains("dragging")) {
-      panel.style.maxHeight = `${targetHeight(state)}px`;
-    } else if (!isMobile()) {
-      panel.style.maxHeight = "";
-    }
-    if (map) {
+  SheetPanel.setup({
+    onResize: () => {
+      if (!map) return;
       map.invalidateSize();
       if (treeLayer) treeLayer.draw();
-    }
-  }
-
-  setState("collapsed");
-  window.addEventListener("resize", () => {
-    if (!panel.classList.contains("dragging")) setState(panel.dataset.state);
-  });
-  hideBtn.addEventListener("click", () => setState("minimized"));
-
-  let dragging = false;
-  let startY = 0;
-  let startHeight = 0;
-  let moved = false;
-  let lastHeight = 0;
-  // Touch input suppresses the click that would otherwise follow a drag; a mouse does
-  // not, so a drag with one (a narrow desktop window) would snap the sheet and then
-  // immediately toggle it back. Swallow exactly one click after a real drag.
-  let swallowClick = false;
-
-  toggle.addEventListener("pointerdown", (e) => {
-    if (!isMobile()) return;
-    dragging = true;
-    moved = false;
-    startY = e.clientY;
-    startHeight = panel.getBoundingClientRect().height;
-    lastHeight = startHeight;
-    panel.classList.add("dragging");
-    panel.style.maxHeight = "none";
-    try {
-      toggle.setPointerCapture(e.pointerId);
-    } catch (err) {
-      // Non-fatal: pointer capture keeps tracking if the finger slides off the handle,
-      // but the drag math below works without it.
-    }
-  });
-
-  toggle.addEventListener("pointermove", (e) => {
-    if (!dragging) return;
-    const deltaY = startY - e.clientY;
-    if (Math.abs(deltaY) > DRAG_MOVE_THRESHOLD) moved = true;
-    const vh = window.innerHeight;
-    // Capped just above the expanded target so an enthusiastic drag can't overshoot into
-    // something that reads as "fullscreen with no escape".
-    const maxHeight = vh * PANEL_EXPANDED_VH + 24;
-    lastHeight = Math.min(maxHeight, Math.max(PANEL_MINIMIZED_PX, startHeight + deltaY));
-    panel.style.height = `${lastHeight}px`;
-  });
-
-  function endDrag() {
-    if (!dragging) return;
-    dragging = false;
-    panel.classList.remove("dragging");
-    panel.style.height = "";
-    panel.style.maxHeight = "";
-    if (!moved) return; // plain tap: the click listener below handles it
-    swallowClick = true;
-
-    const vh = window.innerHeight;
-    const collapsedPx = vh * PANEL_COLLAPSED_VH;
-    const expandedPx = vh * PANEL_EXPANDED_VH;
-    if (lastHeight < (PANEL_MINIMIZED_PX + collapsedPx) / 2) setState("minimized");
-    else if (lastHeight < (collapsedPx + expandedPx) / 2) setState("collapsed");
-    else setState("expanded");
-  }
-
-  toggle.addEventListener("pointerup", endDrag);
-  toggle.addEventListener("pointercancel", endDrag);
-  toggle.addEventListener("click", () => {
-    if (swallowClick) { swallowClick = false; return; }
-    if (!isMobile()) return;
-    setState(panel.dataset.state === "expanded" ? "collapsed" : "expanded");
+    },
   });
 
   // Follow the OS theme: the palette lives in CSS, so re-read it and redraw.
@@ -1596,17 +1453,9 @@ async function loadWardLayer() {
 
 let baseLayer = null;
 function makeBaseLayer() {
-  const dark = window.matchMedia("(prefers-color-scheme: dark)").matches;
-  const source = basemapSource(dark);
-  return L.tileLayer(source.url, {
-    attribution: source.attribution,
-    // detectRetina fetches @2x tiles one zoom level deeper, and pays for it by
-    // decrementing the layer's own maxZoom. Left at MAX_ZOOM that silently puts the
-    // deepest zoom above the layer's ceiling and the basemap disappears entirely, so
-    // the layer is given one level of headroom to give back.
-    maxZoom: MAX_ZOOM + 1,
-    maxNativeZoom: source.maxNativeZoom,
-    detectRetina: true,
+  return Basemap.layer({
+    dark: window.matchMedia("(prefers-color-scheme: dark)").matches,
+    credit: TREE_CREDIT,
   });
 }
 
