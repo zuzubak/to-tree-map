@@ -3,17 +3,30 @@
  * first. This file adds only what a choropleth needs: a sequential ramp, a legend that
  * names its class breaks, and the distribution chart in the panel.
  *
- * One hue per page, light to dark, because every one of these maps encodes magnitude:
- * age, trees per 100 m, trees per resident. No rainbow, no diverging pair -- none of
- * these measures has a meaningful midpoint that "high" and "low" sit either side of.
- * The hue differs per page only so the three read as siblings rather than reprints.
+ * Two ramps, both sequential, because all three maps encode magnitude: age, trees per
+ * 100 m, trees per resident. Neither has a meaningful midpoint, so neither is diverging.
+ *
+ * The two segment maps use a cool-to-warm heat ramp, blue through cyan and amber to
+ * red. It spends far more of the colour wheel than a single hue does, which is the
+ * point -- a one-hue ramp over 43,000 thin lines leaves the middle classes nearly
+ * indistinguishable at city zoom. The cost is that lightness no longer rises
+ * monotonically (the amber middle is the lightest step, both ends are dark), so the
+ * order has to be read off the legend rather than inferred from "darker means more".
+ * In exchange both ends of the scale are the most visible things on the map, which for
+ * these two questions is where the interest actually is.
+ *
+ * Every step pair was checked rather than eyeballed -- OKLab dE between adjacent
+ * classes under normal vision and simulated deuteranopia, protanopia and tritanopia
+ * (Machado 2009), plus contrast against both basemap surfaces. Light ramp: minimum
+ * adjacent dE 18.5 normal, 15.5 worst CVD. Dark: 20.2 normal, 14.1 worst CVD. The
+ * floors are 15 and 8.
+ *
+ * The per-resident map keeps one hue. Its unit is a filled census polygon rather than a
+ * thin line, so area carries the magnitude and a single hue reads cleanly.
  */
 
-body[data-ramp="age"] {
-  --an-1: #ecd6a4; --an-2: #d9ab66; --an-3: #c58c42; --an-4: #96601f; --an-5: #57330c;
-}
-body[data-ramp="street"] {
-  --an-1: #cbe4c5; --an-2: #9bcd94; --an-3: #6ab46c; --an-4: #3b8c48; --an-5: #1b5428;
+body[data-ramp="heat"] {
+  --an-1: #2a4b9b; --an-2: #3f9ab5; --an-3: #f2c23a; --an-4: #dd6a14; --an-5: #ab1f28;
 }
 body[data-ramp="people"] {
   --an-1: #c2dcfa; --an-2: #93bff3; --an-3: #5598e7; --an-4: #2a78d6; --an-5: #0d366b;
@@ -21,27 +34,20 @@ body[data-ramp="people"] {
 
 body { --an-null: #b4b2aa; }
 
-/* Dark mode is stepped for a dark ground, not flipped: low values recede into the
-   basemap and high values come forward, which is the reverse of the light ramp's
-   direction and the same choice ../style.css already makes for --seq-1..5. */
+/* Dark mode is stepped for a dark ground, not flipped. The heat ramp keeps its hue
+   order -- cool low, warm high -- but every step is lifted so it carries against a dark
+   basemap instead of sinking into it; the deep navy of the light ramp would be nearly
+   invisible there. The single-hue ramp reverses direction instead, so low values recede
+   and high ones come forward, which is the same choice ../style.css already makes for
+   --seq-1..5. */
 @media (prefers-color-scheme: dark) {
-  body[data-ramp="age"] {
-    --an-1: #4a3312; --an-2: #78521d; --an-3: #a8762c; --an-4: #d2a24a; --an-5: #ecc77d;
-  }
-  body[data-ramp="street"] {
-    --an-1: #16401f; --an-2: #27613a; --an-3: #3f8a52; --an-4: #63b374; --an-5: #9ad4a2;
+  body[data-ramp="heat"] {
+    --an-1: #6366e8; --an-2: #2fbcd8; --an-3: #fae158; --an-4: #ef7a1e; --an-5: #c62a58;
   }
   body[data-ramp="people"] {
     --an-1: #16365f; --an-2: #1f5398; --an-3: #3987e5; --an-4: #6da7ec; --an-5: #b7d3f6;
   }
   body { --an-null: #55534d; }
-}
-
-.an-subtitle {
-  margin: 6px 0 0;
-  font-size: 12.5px;
-  line-height: 1.45;
-  color: var(--text-secondary);
 }
 
 /* ---- Legend -------------------------------------------------------------- */

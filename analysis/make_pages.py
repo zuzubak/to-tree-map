@@ -232,7 +232,7 @@ AGE_NOTE = ("Every street tree with an estimated age, in ten-year bins. The long
 
 PAGES = [
     dict(
-        slug="age", ramp="age",
+        slug="age", ramp="heat",
         title="Toronto Street Tree Ages",
         heading="Estimated age of Toronto's street trees",
         description=("An interactive map of the estimated age of Toronto's street trees, "
@@ -264,7 +264,7 @@ PAGES = [
     };""",
     ),
     dict(
-        slug="streets", ramp="street",
+        slug="streets", ramp="heat",
         title="Toronto Street Tree Density",
         heading="Street trees per 100 m of street",
         description=("An interactive map of how densely Toronto's streets are planted: "
