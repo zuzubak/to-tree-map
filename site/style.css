@@ -389,8 +389,10 @@ html, body {
 }
 
 /* ---- Map-to-map nav ------------------------------------------------------
-   The pill row linking this map to the three analyses, and them to each other.
-   Shared so the set reads as one family however you arrive at it. */
+   The pill row the analysis pages use to reach each other and to get back to the
+   tree map. The tree map does not link out to them: they are unlisted while they
+   are still being worked on. Lives here rather than in analysis.css because it is
+   styled from the shared tokens and the analysis pages load this sheet first. */
 
 .an-nav {
   display: flex;

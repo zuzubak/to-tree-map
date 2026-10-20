@@ -30,6 +30,9 @@ SHELL = """<!doctype html>
   <title>{title}</title>
   <meta name="description" content="{description}">
   <link rel="canonical" href="https://malcolmkennedy.com/to-tree-map/analysis/{slug}.html">
+  <!-- Unlisted while these are still being worked on: reachable by URL, but kept
+       out of search results and not linked from the tree map. -->
+  <meta name="robots" content="noindex, nofollow">
 
   <meta property="og:type" content="website">
   <meta property="og:site_name" content="Malcolm Kennedy">
