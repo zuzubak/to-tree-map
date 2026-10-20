@@ -28,8 +28,10 @@
 body[data-ramp="heat"] {
   --an-1: #2a4b9b; --an-2: #3f9ab5; --an-3: #f2c23a; --an-4: #dd6a14; --an-5: #ab1f28;
 }
-body[data-ramp="people"] {
-  --an-1: #c2dcfa; --an-2: #93bff3; --an-3: #5598e7; --an-4: #2a78d6; --an-5: #0d366b;
+/* Canopy is magnitude, so one hue light to dark. Green because the subject is leaves
+   and nothing else on the page competes for it. */
+body[data-ramp="canopy"] {
+  --an-1: #cbe4c5; --an-2: #9bcd94; --an-3: #6ab46c; --an-4: #3b8c48; --an-5: #1b5428;
 }
 
 body { --an-null: #b4b2aa; }
@@ -44,8 +46,8 @@ body { --an-null: #b4b2aa; }
   body[data-ramp="heat"] {
     --an-1: #6366e8; --an-2: #2fbcd8; --an-3: #fae158; --an-4: #ef7a1e; --an-5: #c62a58;
   }
-  body[data-ramp="people"] {
-    --an-1: #16365f; --an-2: #1f5398; --an-3: #3987e5; --an-4: #6da7ec; --an-5: #b7d3f6;
+  body[data-ramp="canopy"] {
+    --an-1: #16401f; --an-2: #27613a; --an-3: #3f8a52; --an-4: #63b374; --an-5: #9ad4a2;
   }
   body { --an-null: #55534d; }
 }
@@ -360,3 +362,19 @@ body[data-ramp="muni"] {
 .line-key i { width: 22px; height: 0; flex: none; }
 .line-key i.solid { border-top: 2.5px solid var(--text-primary); }
 .line-key i.dashed { border-top: 2px dashed var(--text-secondary); }
+
+/* ---- Source list ---------------------------------------------------------- */
+
+.an-sources {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: var(--text-muted);
+}
+
+.an-sources a { color: var(--text-secondary); }

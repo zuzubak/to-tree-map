@@ -26,6 +26,10 @@ seeds:
       +column_types:
         genus: varchar
         genus_common: varchar
+    da_canopy:
+      +column_types:
+        dauid: varchar
+        canopy_m2: double
     name_corrections:
       +column_types:
         raw_lower: varchar

@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Toronto Tree Canopy Cover</title>
+  <meta name="description" content="Share of each Toronto census block covered by tree canopy, from the City's 2018 Tree Canopy Study.">
+  <link rel="canonical" href="https://malcolmkennedy.com/to-tree-map/analysis/canopy.html">
+  <!-- Unlisted while these are still being worked on: reachable by URL, but kept
+       out of search results and not linked from the tree map. -->
+  <meta name="robots" content="noindex, nofollow">
+
+  <meta name="theme-color" content="#ffffff">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+  <link rel="stylesheet" href="../style.css">
+  <link rel="stylesheet" href="analysis.css">
+</head>
+<body data-ramp="canopy">
+<script src="/header.js"></script>
+  <div class="app">
+    <main id="map-pane">
+      <div id="map"></div>
+      <div id="search" class="map-search"></div>
+      <div class="tree-tip" id="tip" hidden></div>
+      <div class="map-badge" id="loading-badge">
+        <span class="spinner" aria-hidden="true"></span>
+        <span>Loading 3,727 census blocks&hellip;</span>
+      </div>
+    </main>
+
+    <aside class="panel" id="panel">
+      <div class="panel-handle-row">
+        <button class="panel-drag-handle" id="panel-toggle" aria-label="Toggle panel" aria-expanded="false">
+          <span class="handle-bar"></span>
+          <span class="handle-label">Stats &amp; legend</span>
+        </button>
+        <button class="panel-hide-btn" id="panel-hide" aria-label="Hide panel and show map">
+          Hide &#9660;
+        </button>
+      </div>
+
+      <div class="panel-scroll">
+        <header class="panel-header">
+          <h1>Tree canopy cover by block</h1>
+          <nav class="an-nav" aria-label="Analyses"><a href="../">All 688,335 trees</a><a href="age.html">Estimated age</a><a href="canopy.html" aria-current="page">Canopy cover</a><a href="density.html">Population density scatter</a><a href="parking.html">Front-yard parking</a></nav>
+          <div class="stats" id="stats"></div>
+        </header>
+
+        <div class="an-section">
+          <h2 id="legend-unit"></h2>
+          <div class="ramp-legend" id="legend"></div>
+        </div>
+
+        <div class="an-section">
+          <h2>Distribution</h2>
+          <div id="panel-chart"></div>
+        </div>
+
+        <div class="an-section">
+          <h2>Sources</h2>
+          <ul class="an-sources"><li><a href="https://open.toronto.ca/dataset/forest-and-land-cover/">Forest and Land Cover</a>, 2018 Tree Canopy Study, City of Toronto</li><li><a href="https://www150.statcan.gc.ca/n1/en/catalogue/98100015">Census of Population, 2021</a>, Statistics Canada</li></ul>
+
+        </div>
+      </div>
+    </aside>
+  </div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="../basemap.js"></script>
+  <script src="../panel.js"></script>
+  <script src="/map-search.js"></script>
+  <!-- Written at deploy time from the CARTO_API_KEY secret; absent locally, which is fine. -->
+  <script src="../config.js"></script>
+  <script>
+    window.ANALYSIS = {
+      source: "blocks",
+      metric: "cpct",
+      decimals: 0,
+      unit: "Tree canopy, % of block area",
+      unitShort: "%",
+      tipLabel: "Canopy cover",
+      nullLabel: "Not measured",
+      chart: "metric",
+      credit: "Canopy: <a href=\"https://open.toronto.ca/dataset/forest-and-land-cover/\">City of Toronto, 2018 Tree Canopy Study</a> &middot; Trees: <a href=\"https://open.toronto.ca/dataset/street-tree-data/\">City of Toronto</a>",
+      dist: ({ summary }) => ({
+        bin: 5,
+        cap: 70,
+        median: summary.med_canopy,
+        axis: ["0", "35", "70%+"],
+        note: "",
+      }),
+      stats: ({ summary, compact, num }) => [
+        [num(summary.city_canopy, 1) + "%", "City canopy cover"],
+        [num(summary.med_canopy, 1) + "%", "Median block"],
+        [compact(summary.canopy_ha) + " ha", "Canopy mapped"],
+        [compact(summary.areas), "Blocks mapped"],
+      ],
+    };
+  </script>
+  <script src="analysis.js"></script>
+
+  <!-- Pageview counts only (GoatCounter): no cookies, so no consent banner needed. -->
+  <script data-goatcounter="https://zuzubak.goatcounter.com/count"
+          async src="//gc.zgo.at/count.js"></script>
+</body>
+</html>

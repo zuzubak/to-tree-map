@@ -58,6 +58,12 @@ select
          then round(coalesce(t.tree_count, 0) * 1000.0 / a.population, 1) end as trees_per_1000,
     case when a.area_m2 > 0
          then round(coalesce(t.tree_count, 0) / (a.area_m2 / 10000.0), 1) end as trees_per_ha,
+    round(c.canopy_m2) as canopy_m2,
+    -- Share of the block under tree canopy, mapped top-down in 2018: canopy overhanging
+    -- a road or a roof counts as canopy, so this is what is over the block rather than
+    -- what is rooted in it, and it can exceed what any count of trunks would suggest.
+    case when a.area_m2 > 0 and c.canopy_m2 is not null
+         then round(100.0 * c.canopy_m2 / a.area_m2, 2) end as canopy_pct,
     -- Residents per hectare: the density axis of the scatter.
     case when a.area_m2 > 0
          then round(a.population / (a.area_m2 / 10000.0), 2) end as people_per_ha,
@@ -80,3 +86,4 @@ left join aged g using (dauid)
 left join {{ source('geo', 'da_municipality') }} m using (dauid)
 left join {{ source('geo', 'segment_area') }} s using (dauid)
 left join parking k using (dauid)
+left join {{ ref('da_canopy') }} c using (dauid)

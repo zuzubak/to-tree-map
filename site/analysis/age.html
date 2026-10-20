@@ -4,18 +4,11 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Toronto Street Tree Ages</title>
-  <meta name="description" content="An interactive map of the estimated age of Toronto's street trees, block by block. Age is estimated from trunk diameter using published species growth factors. Click any block for its full age distribution.">
+  <meta name="description" content="Estimated age of Toronto's street trees by block, from trunk diameter.">
   <link rel="canonical" href="https://malcolmkennedy.com/to-tree-map/analysis/age.html">
   <!-- Unlisted while these are still being worked on: reachable by URL, but kept
        out of search results and not linked from the tree map. -->
   <meta name="robots" content="noindex, nofollow">
-
-  <meta property="og:type" content="website">
-  <meta property="og:site_name" content="Malcolm Kennedy">
-  <meta property="og:url" content="https://malcolmkennedy.com/to-tree-map/analysis/age.html">
-  <meta property="og:title" content="Toronto Street Tree Ages">
-  <meta property="og:description" content="An interactive map of the estimated age of Toronto's street trees, block by block. Age is estimated from trunk diameter using published species growth factors. Click any block for its full age distribution.">
-  <meta name="twitter:card" content="summary">
 
   <meta name="theme-color" content="#ffffff">
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
@@ -48,21 +41,14 @@
 
       <div class="panel-scroll">
         <header class="panel-header">
-          <h1>Estimated age of Toronto's street trees</h1>
-          <nav class="an-nav" aria-label="Analyses"><a href="age.html" aria-current="page">Estimated age</a><a href="streets.html">Trees per 100 m</a><a href="people.html">Trees per resident</a><a href="density.html">Density vs planting</a><a href="parking.html">Front-yard parking</a><a href="../">← All 688,335 trees</a></nav>
-          <p class="an-subtitle">Trunk diameter is the only clue the inventory gives about age, so every figure here is an estimate. Click a block for the spread behind its median.</p>
+          <h1>Estimated age of street trees</h1>
+          <nav class="an-nav" aria-label="Analyses"><a href="../">All 688,335 trees</a><a href="age.html" aria-current="page">Estimated age</a><a href="canopy.html">Canopy cover</a><a href="density.html">Population density scatter</a><a href="parking.html">Front-yard parking</a></nav>
           <div class="stats" id="stats"></div>
         </header>
 
         <div class="an-section">
           <h2 id="legend-unit"></h2>
           <div class="ramp-legend" id="legend"></div>
-          <p class="an-note">
-            Five classes, cut at quintiles, so each holds about the same number of
-            blocks. The breaks are printed because that makes the class widths
-            uneven &mdash; the alternative, equal widths, would put most of the city in
-            one colour to leave room for a handful of extremes.
-          </p>
         </div>
 
         <div class="an-section">
@@ -71,47 +57,10 @@
         </div>
 
         <div class="an-section">
-          <h2>How the age is estimated</h2>
-          <p class="an-note">
-            There is no planting date in the inventory, so age is estimated from trunk
-            diameter by the arborist's standard field method: <strong>diameter in inches
-            &times; a growth factor for the species</strong>, where the factor is the
-            average number of years that species takes to add an inch of trunk.
-          </p>
-          <p class="an-note">
-            Where each factor came from, by tree:
-          </p>
-          <div class="an-provenance" id="provenance"></div>
-          <p class="an-note">
-            The published factors describe open-grown landscape trees. A street tree in
-            a four-foot pit with compacted soil and road salt thickens more slowly than
-            that, so these figures run young on the most stressed sites.
-          </p>
+          <h2>Sources</h2>
+          <ul class="an-sources"><li><a href="https://open.toronto.ca/dataset/street-tree-data/">Street Tree Data</a>, City of Toronto</li><li><a href="https://open.toronto.ca/dataset/toronto-centreline-tcl/">Toronto Centreline</a>, City of Toronto</li><li>Age: diameter in inches &times; an ISA growth factor for the species. See the <a href="https://github.com/zuzubak/to-tree-map">repository</a> for the factor table and how each tree was matched.</li></ul>
+          <p class="an-note" id="as-of"></p>
         </div>
-
-        <div class="an-section">
-          <h2>What this cannot tell you</h2>
-          <p class="an-note">
-            <strong>It is an estimate shaped like a measurement.</strong> Treat a single
-            block as an indication and the city-wide pattern as the finding.
-          </p>
-          <p class="an-note">
-            The input is no better than the method. Recorded diameters heap on round
-            numbers, and <strong><span data-fact="dbhHeap"></span> trees &mdash;
-            <span data-fact="dbhHeapShare"></span> of the inventory &mdash; sit on
-            exactly 4 cm or 8 cm</strong>, which is a field convention rather than that
-            many identical trunks. That flattens the young end of every distribution on
-            this page.
-          </p>
-          <p class="an-note">
-            Arithmetic on a bad diameter produces a bad age, and a slow-growing species
-            multiplies the error. <span data-fact="implausible"></span> trees came out
-            older than 250 years &mdash; a 203 cm yew, a 250 cm hawthorn, neither of
-            which exists &mdash; and are excluded from every figure here.
-          </p>
-        </div>
-
-        <p class="an-note" id="as-of"></p>
       </div>
     </aside>
   </div>

@@ -310,7 +310,7 @@
     tip.innerHTML =
       `<div class="tip-head">${num(x, d)} ${esc(CONF.xUnit)}</div>`
       + `<div class="popup-row"><span class="k">Average here</span>`
-      + `<span class="v">${num(hoverY, 1)} per 100 m</span></div>`
+      + `<span class="v">${num(hoverY, 1)}${CONF.ySuffix} ${esc(CONF.yShort)}</span></div>`
       + `<div class="popup-row"><span class="k">Areas in this bin</span>`
       + `<span class="v">${num(bin.n)}</span></div>`
       + `<div class="tip-note">bin covers ${range} ${esc(CONF.xUnit)}, ${scope}</div>`;
@@ -356,7 +356,7 @@
     body.innerHTML = rows.map((r) => `
       <tr data-m="${r.i}" data-active="${isolated < 0 || isolated === r.i}">
         <th scope="row"><span class="swatch" style="background:${colourFor(r.i)}"></span>${esc(pretty(r.m))}</th>
-        <td>${num(r.n)}</td><td>${num(r.d, 0)}</td><td>${num(r.t, 1)}</td>
+        <td>${num(r.n)}</td><td>${num(r.d, CONF.xDecimals)}</td><td>${num(r.t, 1)}</td>
         <td>${r.tenth == null ? "–" : num(r.tenth, 1)}</td>
       </tr>`).join("");
     for (const tr of body.querySelectorAll("tr")) {
@@ -383,13 +383,13 @@
     const peakIsStart = peak && bins.length && peak.b === bins[0].b;
     const stats = [
       [num(rows.length), "Census areas"],
-      [num(median(rows.map((r) => r.y)), 1), "Median trees per 100 m"],
-      [peak ? num(peak.mean, 1) : "–",
+      [num(median(rows.map((r) => r.y)), 1) + CONF.ySuffix, `Median ${CONF.yShort}`],
+      [peak ? num(peak.mean, 1) + CONF.ySuffix : "–",
        !peak ? "Peak average"
              : peakIsStart
                ? `First bin, under ${num(peak.x1, CONF.xDecimals)} ${CONF.xShort}`
                : `Peak average, near ${num(peak.mid, CONF.xDecimals)} ${CONF.xShort}`],
-      [last ? num(last.mean, 1) : "–",
+      [last ? num(last.mean, 1) + CONF.ySuffix : "–",
        last ? `Top bin, ${num(last.x0, CONF.xDecimals)}+ ${CONF.xShort}` : "Top bin"],
     ];
     el("stats").innerHTML = stats.map(([v, l]) =>
@@ -414,8 +414,9 @@
       el("chart-pane").appendChild(box);
       return;
     }
-    points = payload.points.map((p) => Object.assign({}, p, { x: p[CONF.xKey] }))
-      .filter((p) => p.x != null);
+    points = payload.points
+      .map((p) => Object.assign({}, p, { x: p[CONF.xKey], y: p[CONF.yKey] }))
+      .filter((p) => p.x != null && p.y != null);
     munis = payload.municipalities;
 
     canvas = el("chart");

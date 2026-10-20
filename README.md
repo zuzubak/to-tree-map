@@ -27,10 +27,12 @@ shape: Python ingest → DuckDB → dbt → static export → a Leaflet map on G
 - Links are shareable: the URL hash carries the view, and a selected tree is addressed by
   coordinate rather than row number so the link survives a data refresh.
 
-Three further maps analyse the same inventory block by block — [estimated
-age](site/analysis/age.html), [trees per 100 m of street](site/analysis/streets.html) and
-[trees per 1,000 residents](site/analysis/people.html). Click any block for the age
-distribution behind its median. See [The three analysis maps](#the-three-analysis-maps).
+Four further pages analyse the same city block by block: [estimated
+age](site/analysis/age.html), [tree canopy cover](site/analysis/canopy.html), and two
+scatters setting canopy against [population density](site/analysis/density.html) and
+[licensed front-yard parking](site/analysis/parking.html). They are unlisted — reachable
+by URL, kept out of search results and not linked from the map. See
+[The analysis pages](#the-analysis-pages).
 
 ## How it works
 
@@ -230,7 +232,7 @@ running the numbers rather than eyeballing them:
 Trunk size uses a single-hue sequential ramp whose lightest step still clears 2:1 against
 the basemap.
 
-## The three analysis maps
+## The analysis pages
 
 Three further maps live under `site/analysis/`, each answering one question about the same
 inventory. They share one engine (`analysis.js`) and differ only in a configuration block,
@@ -239,10 +241,9 @@ because they differ only in which number they colour by.
 | Map | Unit | Measure |
 |---|---|---|
 | `age.html` | street block | median estimated age |
-| `streets.html` | street block | trees per 100 m of street |
-| `people.html` | census area | trees per 1,000 residents |
-| `density.html` | census area | population density vs trees per 100 m (scatter) |
-| `parking.html` | census area | licensed front-yard parking vs trees per 100 m (scatter) |
+| `canopy.html` | census block | tree canopy cover, % of block area |
+| `density.html` | census block | population density vs canopy (scatter) |
+| `parking.html` | census block | licensed front-yard parking vs canopy (scatter) |
 
 ### Estimated age, and why it is only an estimate
 
@@ -290,74 +291,68 @@ two sources, in order:
    topology leaves that end unnamed — where it named one end, the other name in the pair is
    the other end. That adds ~4,500 more, for 78% with both ends named.
 
-### Density against planting
+### Canopy cover, and why it is the y axis
 
-`density.html` plots one point per census area: residents per hectare against street
-trees per 100 m, coloured by former municipality.
+Three of these pages measure the urban forest as **tree canopy cover** rather than as a
+count of inventory records, from the City's
+[2018 Tree Canopy Study](https://open.toronto.ca/dataset/forest-and-land-cover/).
 
-**The line is the average of each bin along the axis, not a fitted one.** A least-squares
-line through this cloud is nearly flat and explains 0.9% of the variance — true, but all
-it tells you is that no straight line describes the data. The binned average shows what
-is actually there: a rise to about 15 trees per 100 m around 20 residents a hectare, a
-long flat middle near 13.5, then a steady fall above roughly 200, reaching 8 per 100 m in
-the densest bin. Apartment towers set back behind parking and podiums have less street
-frontage to plant, and what there is tends to be arterial.
+That dataset is a full-resolution land cover map — eight classes from multispectral
+satellite imagery and LiDAR, mapped top-down so canopy overhanging a road or a roof
+counts as canopy. It carries neighbourhood and ward only as attributes on grouped
+multipolygons, so despite shipping as 1,812 features it cuts against any geometry:
+Rosedale–Moore Park's canopy alone is 1,546 separate patches and 178,000 vertices.
+Citywide it is 166.4 km², **25.9%** of the city's area, or 30.6% counting shrub.
 
-Twenty-one bins of equal width in log space, so each covers the same distance on the
-axis. A bin holding fewer than 12 areas is dropped and the line breaks rather than
-chasing an average built on three of them — which is also what keeps the curve honest
-when a small municipality is isolated: East York's 153 areas support three bins and it
-draws three.
+It is the better measure here because the street tree inventory structurally cannot see
+private front gardens, parks or institutional land — which is exactly where both of
+these questions land. Street trees stay the right measure for `age.html`, where age comes
+from per-tree trunk diameter and canopy has no per-tree attributes.
 
-Hovering puts a crosshair on the curve and reports the average at that density, the bin
-it falls in and how many areas are in it.
+`analysis/make_canopy.py` cuts the canopy patches against census blocks and writes
+`dbt/seeds/da_canopy.csv`. It is run by hand and its output is committed: the study is a
+fixed 2018 snapshot redone about every ten years, the source is a 436 MB download, and
+the intersection is slow. None of that belongs in a job that runs weekly to pick up new
+tree records.
 
-The x axis is logarithmic because density spans four and a half decades; on a linear one
-the median area sits at 0.6% of the width.
+### The two scatters
+
+Both plot one point per census block, coloured by former municipality, with the line
+being **the average of each bin along the x axis, not a fitted one**. A least-squares
+line invites more confidence than this data has earned; the binned average shows the
+shape instead. Bins holding fewer than 12 blocks are dropped and the line breaks rather
+than chasing noise.
+
+`density.html` puts residents per hectare on a log axis — density spans four and a half
+decades, and on a linear axis the median block sits at 0.6% of the width.
+
+`parking.html` puts licensed front-yard parking spaces per 100 m of street on a linear
+one. Its x axis is partly a map of which bylaw you live under: licensing is a legacy of
+the old City of Toronto, York and East York, which hold 99% of every licensed space,
+while the suburbs were built with driveways and need no permit.
+
+The register has street numbers but no coordinates. Each permit is placed on the block
+whose address range contains its number — the centreline publishes `LO_NUM`/`HI_NUM` per
+side, which places **99.4%** of licensed spaces and avoids the 590 MB address-point file
+entirely. A permit sits at one house, so it goes to the block holding most of its street
+segment.
 
 Former municipality comes from the City's
 [boundary file](https://open.toronto.ca/dataset/former-municipality-boundaries/), by
-largest overlap — census areas do not nest inside the 1998 boundaries, and ward names
+largest overlap — census blocks do not nest inside the 1998 boundaries, and ward names
 only look like they encode them (Eglinton-Lawrence spans old Toronto and North York).
 
 **Six categories is past what colour can carry.** Checked as all pairs in OKLab under
 simulated deuteranopia, protanopia and tritanopia, the best six of this site's palette
 separate by 6.8 at worst against a floor of 8, and the default first six fall to 3.3 —
-two of them indistinguishable. The page uses the best-separating six and then makes sure
-nothing depends on hue: every municipality's count, medians and densest-tenth average are
-in a table, and clicking either the legend or a table row isolates it.
+two of them indistinguishable. The pages use the best-separating six and then make sure
+nothing depends on hue: every municipality's figures are in a table, and clicking either
+the legend or a table row isolates it.
 
-### Front-yard parking against planting
+The scatter engine is shared: the pages differ only in a config block declaring the x
+and y fields, the x scale, domain, bins and labels.
 
-`parking.html` is the same scatter with the x axis swapped for licensed front-yard
-parking spaces per 100 m, from the City's
-[Residential Front Yard Parking](https://open.toronto.ca/dataset/residential-front-yard-parking/)
-register — 18,033 permits covering 18,889 licensed spaces.
-
-**The answer is no, and mildly the opposite.** Areas with no licensed parking average
-13.7 street trees per 100 m; the most heavily licensed average 16.8. Isolating old
-Toronto makes it steeper, 14.1 to 19.3. The reason is that the two things sit on
-different land: a permit covers *private* ground between house and sidewalk, while a
-street tree stands on the *public* allowance beyond it. Paving a front yard does not
-remove a City tree, and the streets where people bother to license parking — narrow
-old-city lots with no driveway — are also the oldest and most densely planted.
-
-**The axis is partly a map of which bylaw you live under**, and the page says so up
-front. Licensing is a legacy of the old City of Toronto, York and East York, which hold
-99% of every licensed space; the suburbs were built with driveways and need no permit.
-70% of areas sit at zero and most of them are suburban.
-
-The register has street numbers but no coordinates. Each permit is placed on the block
-whose address range contains its number — the centreline publishes `LO_NUM`/`HI_NUM` per
-side, which places **99.4%** of licensed spaces and avoids the 590 MB address-point file
-entirely. A permit sits at one house, so it goes to the area holding most of its block,
-where street length is clipped and split between areas instead.
-
-The scatter engine is shared with `density.html`: the pages differ only in a config
-block declaring the x field, its scale (log for density, linear here), domain, bins and
-labels.
-
-### Why census *areas*, not census blocks
+### Why census areas, not the finer census blocks
 
 Population is only published to dissemination-block level in a file StatCan's firewall will
 not serve to a script, and a block holding four trees produces a ratio that swings wildly on

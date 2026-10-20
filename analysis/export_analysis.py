@@ -93,7 +93,7 @@ def main() -> None:
         CREATE OR REPLACE TEMP TABLE area_export AS
         SELECT m.dauid, m.population, m.tree_count, m.trees_with_age,
                m.median_age, m.mean_age, m.trees_per_1000, m.trees_per_ha, m.area_ha,
-               w.ward_name,
+               w.ward_name, m.canopy_pct,
                st_simplify(d.geom_wgs, {SIMPLIFY_AREAS}) AS geom
         FROM da_metrics m
         JOIN geo.dissemination_areas d USING (dauid)
@@ -106,8 +106,8 @@ def main() -> None:
     )
     rows = con.execute(
         "SELECT dauid, population, tree_count, trees_with_age, median_age, mean_age,"
-        " trees_per_1000, trees_per_ha, area_ha, st_asgeojson(geom), ward_name"
-        " FROM area_export"
+        " trees_per_1000, trees_per_ha, area_ha, st_asgeojson(geom), ward_name,"
+        " canopy_pct FROM area_export"
     ).fetchall()
 
     hist: dict[str, list] = {}
@@ -124,7 +124,7 @@ def main() -> None:
             "properties": prune({
                 "id": r[0], "pop": r[1], "n": r[2], "aged": r[3],
                 "med": r[4], "mean": r[5], "per1k": r[6], "perha": r[7],
-                "ha": r[8], "ward": r[10],
+                "ha": r[8], "ward": r[10], "cpct": r[11],
             }) | prune({"hist": dense_hist(hist.get(r[0], [])) or None}),
         })
     summary = dict(zip(
@@ -132,12 +132,18 @@ def main() -> None:
             SELECT count(*) areas, sum(tree_count) trees, sum(population) people,
                    round(median(median_age),1) med_age,
                    round(median(trees_per_1000),1) med_per1k,
-                   round(sum(tree_count)*1000.0/sum(population),1) city_per1k
+                   round(sum(tree_count)*1000.0/sum(population),1) city_per1k,
+                   round(median(canopy_pct),1) med_canopy,
+                   round(100.0*sum(canopy_m2)/(sum(area_ha)*10000),1) city_canopy,
+                   round(sum(canopy_m2)/10000.0) canopy_ha
             FROM da_metrics""").description],
         con.execute("""
             SELECT count(*), sum(tree_count), sum(population),
                    round(median(median_age),1), round(median(trees_per_1000),1),
-                   round(sum(tree_count)*1000.0/sum(population),1)
+                   round(sum(tree_count)*1000.0/sum(population),1),
+                   round(median(canopy_pct),1),
+                   round(100.0*sum(canopy_m2)/(sum(area_ha)*10000),1),
+                   round(sum(canopy_m2)/10000.0)
             FROM da_metrics""").fetchone()))
 
     write(OUT / "blocks.geojson",
@@ -201,7 +207,7 @@ def main() -> None:
         """
         SELECT m.dauid, m.municipality, m.people_per_ha, m.trees_per_100m,
                m.population, m.tree_count, m.area_ha, m.street_m, w.ward_name,
-               m.parking_per_100m, m.parking_spaces
+               m.parking_per_100m, m.parking_spaces, m.canopy_pct
         FROM da_metrics m
         LEFT JOIN (
             SELECT a.dauid, mode(t.ward_name) AS ward_name
@@ -236,7 +242,7 @@ def main() -> None:
             {"id": r[0], "m": muni_ix[r[1]],
              "x": r[2] if (r[4] or 0) > 0 else None, "y": r[3], "pop": r[4],
              "n": r[5], "ha": r[6], "street": int(r[7]), "ward": r[8],
-             "park": r[9], "spaces": r[10]}
+             "park": r[9], "spaces": r[10], "cpct": r[11]}
             for r in pts
         ],
     }

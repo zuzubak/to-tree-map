@@ -251,9 +251,7 @@
         marker: Math.min(1, median / AGE_SPAN),
         axis: ["0", "70", "140+ years"],
         key: `<span><i class="rule"></i>City median, ${num(median, 0)} years</span>`,
-      }) + `<p class="an-chart-note">Every one of the ${compact(meta.trees_aged)} `
-         + `trees with an estimated age, in ten-year bins. The long tail past a `
-         + `century is where the method is least trustworthy.</p>`;
+      });
       return;
     }
     // dist is a function because the median it marks comes from the payload's own
@@ -267,7 +265,7 @@
       axis: dist.axis,
       key: `<span><i class="rule"></i>City median, ${num(dist.median, CONF.decimals)}</span>`
          + `<span><i class="dash"></i>Class breaks</span>`,
-    }) + `<p class="an-chart-note">${dist.note}</p>`;
+    }) + (dist.note ? `<p class="an-chart-note">${dist.note}</p>` : "");
   }
 
   /* Figures quoted in the page copy, filled from the payload at load.
@@ -301,19 +299,6 @@
     }
   }
 
-  function renderProvenance() {
-    const host = el("provenance");
-    if (!host) return;
-    const total = Object.values(meta.basis).reduce((a, b) => a + b, 0);
-    const pretty = { isa: "Species growth factor", genus_median: "Genus median, species not listed",
-                     rule_of_thumb: "Rule of thumb for the genus" };
-    host.innerHTML = Object.entries(meta.basis)
-      .sort((a, b) => b[1] - a[1])
-      .map(([k, n]) => `<div class="popup-row"><span class="k">${esc(pretty[k] || k)}</span>`
-        + `<span class="v">${num((n / total) * 100, 1)}%</span></div>`)
-      .join("");
-  }
-
   /* ------------------------------------------------------------ popup & tip ------ */
 
   function row(k, v) {
@@ -328,6 +313,7 @@
     html += row("Residents (2021)", p.pop ? num(p.pop) : "none recorded");
     html += row("Per 1,000 residents", p.per1k == null ? "–" : num(p.per1k, 0));
     html += row("Per hectare", num(p.perha, 1));
+    html += row("Tree canopy", p.cpct == null ? "–" : `${num(p.cpct, 1)}% of area`);
     if (p.aged) {
       html += `<div class="popup-sep">`
             + row("Median estimated age", `${num(p.med, 1)} yrs`)
@@ -344,11 +330,9 @@
            + `<span><i class="ghost"></i>City, rescaled</span>`
            + `<span><i class="rule"></i>Median</span>`,
       }) + `</div>`;
-      html += `<p class="an-chart-note">${num(p.aged)} of ${num(p.n)} trees have an `
-            + `estimated age.</p>`;
+      html += `<p class="an-chart-note">${num(p.aged)} of ${num(p.n)} trees aged</p>`;
     } else {
-      html += `<p class="an-chart-note popup-sep">No trees here have an estimated `
-            + `age, so there is no distribution to draw.</p>`;
+      html += `<p class="an-chart-note popup-sep">No trees with an estimated age</p>`;
     }
     return html;
   }
@@ -376,16 +360,12 @@
            + `<span><i class="rule"></i>Median</span>`,
       }) + `</div>`;
       if (p.aged !== p.n) {
-        html += `<p class="an-chart-note">${num(p.aged)} of ${num(p.n)} trees here have `
-              + `an estimated age.</p>`;
+        html += `<p class="an-chart-note">${num(p.aged)} of ${num(p.n)} trees aged</p>`;
       }
     } else if (p.n === 0) {
-      html += `<p class="an-chart-note popup-sep">No inventoried street trees on this `
-            + `block. That can mean a street without them, or one whose trees stand on `
-            + `private land and so never enter the City's inventory.</p>`;
+      html += `<p class="an-chart-note popup-sep">No inventoried street trees</p>`;
     } else {
-      html += `<p class="an-chart-note popup-sep">None of these trees has a recorded `
-            + `diameter, so there is no age to estimate.</p>`;
+      html += `<p class="an-chart-note popup-sep">No recorded diameters</p>`;
     }
     return html;
   }
@@ -558,7 +538,6 @@
     renderStats();
     renderLegend();
     renderPanelChart();
-    renderProvenance();
     renderFacts();
     buildLayer();
     badge.hidden = true;

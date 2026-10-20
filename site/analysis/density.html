@@ -3,19 +3,12 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Density vs Street Trees</title>
-  <meta name="description" content="Does Toronto plant fewer street trees where more people live? Population density against street trees per 100 m for every census area in the city, coloured by former municipality.">
+  <title>Population Density vs Canopy</title>
+  <meta name="description" content="Population density against tree canopy cover for every census block in Toronto.">
   <link rel="canonical" href="https://malcolmkennedy.com/to-tree-map/analysis/density.html">
   <!-- Unlisted while these are still being worked on: reachable by URL, but kept
        out of search results and not linked from the tree map. -->
   <meta name="robots" content="noindex, nofollow">
-
-  <meta property="og:type" content="website">
-  <meta property="og:site_name" content="Malcolm Kennedy">
-  <meta property="og:url" content="https://malcolmkennedy.com/to-tree-map/analysis/density.html">
-  <meta property="og:title" content="Density vs Street Trees">
-  <meta property="og:description" content="Population density against street trees per 100 m for every census area in Toronto, coloured by former municipality.">
-  <meta name="twitter:card" content="summary">
 
   <meta name="theme-color" content="#ffffff">
   <link rel="stylesheet" href="../style.css">
@@ -31,7 +24,7 @@
       </div>
       <div class="map-badge" id="loading-badge">
         <span class="spinner" aria-hidden="true"></span>
-        <span>Loading 3,565 census areas&hellip;</span>
+        <span>Loading 3,565 census blocks&hellip;</span>
       </div>
     </main>
 
@@ -48,66 +41,21 @@
 
       <div class="panel-scroll">
         <header class="panel-header">
-          <h1>Does density cost you trees?</h1>
-          <nav class="an-nav" aria-label="Analyses">
-            <a href="../">All 688,335 trees</a>
-            <a href="age.html">Estimated age</a>
-            <a href="streets.html">Trees per 100 m</a>
-            <a href="people.html">Trees per resident</a>
-            <a href="density.html" aria-current="page">Density vs planting</a>
-            <a href="parking.html">Front-yard parking</a>
-          </nav>
-          <p class="an-subtitle">
-            Every census area in Toronto, plotted by how many people live on a hectare
-            against how many street trees stand on 100 m of its streets. The line is the
-            average of each bin along the axis; hover it to read any density.
-          </p>
+          <h1>Population density scatter</h1>
+          <nav class="an-nav" aria-label="Analyses"><a href="../">All 688,335 trees</a><a href="age.html">Estimated age</a><a href="canopy.html">Canopy cover</a><a href="density.html" aria-current="page">Population density scatter</a><a href="parking.html">Front-yard parking</a></nav>
           <div class="stats" id="stats"></div>
         </header>
 
         <div class="an-section">
-          <h2>The shape of it</h2>
-          <p class="an-note">
-            <strong>Not much, until it does.</strong> The average climbs gently to about
-            15 trees per 100 m around 20 residents a hectare, runs flat near 13.5 through
-            the whole middle of the city, and then falls away above roughly 200 &mdash;
-            reaching about 8 per 100 m in the densest bin.
-          </p>
-          <p class="an-note">
-            The fall at the top is the only part with real movement in it. Apartment
-            towers set back behind parking and podiums have less street frontage to
-            plant, and what frontage there is tends to be arterial.
-          </p>
-          <p class="an-note">
-            A straight line through this cloud would be nearly flat and would explain
-            about 1% of the variation between areas &mdash; true, but it would only be
-            telling you that no straight line describes it. The binned average is drawn
-            instead, with a mark at each bin, so the shape comes from the data rather
-            than from a model of it.
-          </p>
+          <h2>The line</h2>
+          <div class="line-key">
+            <span><i class="solid"></i>Average of each density bin</span>
+          </div>
         </div>
 
         <div class="an-section">
           <h2>Former municipality</h2>
-          <p class="an-note">
-            Click one to isolate it; the trend line and the figures above follow. The
-            rest of the city stays on the chart in grey so the comparison is against
-            something.
-          </p>
           <div class="muni-legend" id="legend"></div>
-        </div>
-
-        <div class="an-section">
-          <h2>The line</h2>
-          <div class="line-key">
-            <span><i class="solid"></i>Average trees per 100 m in each density bin</span>
-          </div>
-          <p class="an-note">
-            Twenty-one bins of equal width along the axis, so each covers the same
-            distance on screen. A bin holding fewer than 12 areas is left out and the
-            line breaks rather than chasing an average built on three of them &mdash;
-            which is why it starts a little in from the left edge.
-          </p>
         </div>
 
         <div class="an-section">
@@ -117,77 +65,20 @@
               <thead>
                 <tr>
                   <th scope="col">Municipality</th>
-                  <th scope="col">Areas</th>
+                  <th scope="col">Blocks</th>
                   <th scope="col">Median density</th>
-                  <th scope="col">Median trees</th>
-                  <th scope="col">Densest tenth</th>
+                  <th scope="col">Median canopy</th>
+                  <th scope="col">Top tenth</th>
                 </tr>
               </thead>
               <tbody></tbody>
             </table>
           </div>
-          <p class="an-note">
-            Density is residents per hectare and trees per 100 m, both medians. The last
-            column is the average planting across that municipality's densest tenth of
-            areas, which is where the curve actually moves.
-          </p>
         </div>
 
         <div class="an-section">
-          <h2>How this is measured</h2>
-          <p class="an-note">
-            One point per <strong>census dissemination area</strong>, because that is the
-            only unit that can carry both axes. Population is published there and nowhere
-            finer that is usable, so asking this of a street block would mean giving every
-            block in an area the same density and drawing 39,000 points in 3,565 vertical
-            stripes.
-          </p>
-          <p class="an-note">
-            Street length is clipped to each area's own boundary rather than assigned
-            whole, so a street running along the edge between two areas counts half to
-            each. Areas holding less than 200 m of street are left out: a stub of road
-            through a ravine with four trees on it is not a densely planted place. So are
-            areas with no residents, which have no density to plot.
-          </p>
-          <p class="an-note">
-            Former municipality comes from the City's own
-            <a href="https://open.toronto.ca/dataset/former-municipality-boundaries/">boundary
-            file</a>, by largest overlap. Census areas do not nest inside the 1998
-            boundaries, and ward names only look like they encode them &mdash;
-            Eglinton-Lawrence spans old Toronto and North York.
-          </p>
-        </div>
-
-        <div class="an-section">
-          <h2>What this cannot tell you</h2>
-          <p class="an-note">
-            <strong>Street trees are not canopy.</strong> This counts trees the City
-            inventories on the street allowance. Private front gardens, parks and
-            institutional land hold a great deal of Toronto's canopy and none of it is
-            here, which matters most in exactly the low-density areas on the left of the
-            chart.
-          </p>
-          <p class="an-note">
-            Density is residents per hectare of the whole area, ravines and rail yards
-            included, so a neighbourhood wrapped around a valley reads as sparser than it
-            feels on the street.
-          </p>
-          <p class="an-note">
-            The x axis is logarithmic because density spans four and a half decades. It
-            stops at three clean ones, so <span data-fact="underX"></span> area sparser
-            than 1 resident per hectare and <span data-fact="overX"></span> denser than
-            1,000 sit pinned to the edges rather than being given two more decades of
-            empty chart. <span data-fact="overY"></span> areas are planted more densely
-            than <span data-fact="yMax"></span> trees per 100 m and sit on the top edge
-            for the same reason. Hover reads the true figure in every case.
-          </p>
-          <p class="an-note">
-            <strong>Six colours cannot be made colourblind-safe.</strong> Checked as all
-            pairs in OKLab under simulated deuteranopia, protanopia and tritanopia, the
-            best six of this site's palette still separate by less than the usual floor.
-            That is why every municipality's figures are in the table above, and why
-            clicking one isolates it &mdash; nothing on this page is readable only by hue.
-          </p>
+          <h2>Sources</h2>
+          <ul class="an-sources"><li><a href="https://open.toronto.ca/dataset/forest-and-land-cover/">Forest and Land Cover</a>, 2018 Tree Canopy Study, City of Toronto</li><li><a href="https://www150.statcan.gc.ca/n1/en/catalogue/98100015">Census of Population, 2021</a>, Statistics Canada</li><li><a href="https://open.toronto.ca/dataset/former-municipality-boundaries/">Former Municipality Boundaries</a>, City of Toronto</li></ul>
         </div>
       </div>
     </aside>
@@ -205,8 +96,11 @@
       xUnit: "residents per hectare",
       xShort: "/ha",
       xDecimals: 0,
-      yMax: 45,
-      yLabel: "Street trees per 100 m",
+      yKey: "cpct",
+      yMax: 80,
+      yLabel: "Tree canopy, % of block area",
+      yShort: "canopy",
+      ySuffix: "%",
       bins: 21,
       minBin: 12,
     };
