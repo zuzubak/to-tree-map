@@ -312,8 +312,18 @@ for the remainder, reaching **95.4%** at a median 16.5 m from the centreline. Th
 trees that match no street of their recorded name within 60 m are missing from the density
 counts.
 
-The street-class filter is inherited from an earlier project of mine and revalidated here:
-5,596 km of street against that project's documented 5,605 km, 0.3% apart.
+The street-class filter is inherited from an earlier project of mine and was revalidated
+against it on the same definition: 5,622 km of street against that project's documented
+5,605 km, 0.3% apart.
+
+These maps then drop one more class that the inherited list keeps. **Laneways are not
+street-tree frontage**: 3,918 of the city's 4,146 laneway segments hold no inventoried
+tree at all, and the 343 km between them carry 1,514 trees, 0.2% of the inventory. Left
+in, they were two fifths of every block the density map coloured "no street trees" —
+a statement about what a laneway is rather than about Toronto's canopy. Dropping them
+takes the network to 5,278 km and the city's median density from 9.55 to 10.73 trees per
+100 m. The few trees genuinely on a laneway are not lost; they snap to whichever real
+street runs within 60 m.
 
 ## Running locally
 

@@ -282,6 +282,7 @@
     unsnappedPct: () => `${num((meta.unsnapped / meta.trees_total) * 100, 1)}%`,
     dbhHeap: () => num(meta.dbh_heap),
     dbhHeapShare: () => `${num((meta.dbh_heap / meta.trees_total) * 100, 0)}%`,
+    km: () => num(summary.km),
     // The worst case for a per-resident ratio, found rather than remembered.
     extreme: () => {
       const top = features.reduce((a, f) =>

@@ -1,15 +1,24 @@
 """Street-network conventions shared across the mapping projects."""
 
-# Centreline feature classes that count as "street" -- the local/arterial network
-# people actually live on. Excludes expressways and their ramps (401, DVP,
-# Gardiner): grade-separated through-routes that serve regional traffic rather than
-# the blocks they pass over, and which are never street-tree frontage. Also excludes
-# trails, walkways, rivers, shorelines, hydro corridors, rail and ferry routes.
+# Centreline feature classes that count as street-tree frontage -- the local/arterial
+# network people actually live on. Excludes trails, walkways, rivers, shorelines, hydro
+# corridors, rail and ferry routes, and two things worth naming:
 #
-# Same list the street-density project uses, so "metres of street" means the same
-# thing on every map on the site.
+# Expressways and their ramps (401, DVP, Gardiner): grade-separated through-routes that
+# serve regional traffic rather than the blocks they pass over.
+#
+# Laneways: the City inventories almost no trees on them -- 3,918 of 4,146 laneway
+# segments hold none at all, and the 343 km between them carry 1,514 trees, 0.2% of the
+# inventory. Left in, they were two fifths of every block the density map coloured as
+# "no street trees", which is a statement about what a laneway is rather than about
+# Toronto's canopy. The handful of trees actually on one still get counted: they snap to
+# whichever real street runs within 60 m instead.
+#
+# This is the street-density project's list minus that laneway exclusion, which is why
+# "metres of street" is 5,278 km here against 5,622 km with laneways left in. The
+# underlying network is the same; this map asks a narrower question of it.
 STREET_CLASSES = [
-    "Local", "Collector", "Major Arterial", "Minor Arterial", "Laneway",
+    "Local", "Collector", "Major Arterial", "Minor Arterial",
     "Major Arterial Ramp", "Minor Arterial Ramp", "Collector Ramp",
     "Other Ramp", "Access Road", "Busway",
 ]

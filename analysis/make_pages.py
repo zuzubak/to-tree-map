@@ -164,11 +164,19 @@ STREET_METHOD = """        <div class="an-section">
             the block's own length.
           </p>
           <p class="an-note">
-            Expressways and their ramps are excluded: they are grade-separated
-            through-routes, never street-tree frontage, and leaving them in would stripe
-            the map with false zeroes along the 401, the DVP and the Gardiner. Blocks
-            shorter than 20 m are left out too &mdash; a 6 m connector with two trees is
-            not 33 trees per 100 m of streetscape.
+            Two kinds of street are left out, both because they are not street-tree
+            frontage. <strong>Expressways and their ramps</strong> are grade-separated
+            through-routes, and leaving them in would stripe the map with false zeroes
+            along the 401, the DVP and the Gardiner. <strong>Laneways</strong> are
+            almost never planted &mdash; 3,918 of the city's 4,146 laneway segments hold
+            no inventoried tree at all &mdash; and left in they were two fifths of every
+            block coloured "no street trees", which says more about what a laneway is
+            than about Toronto's canopy. The few trees genuinely on one are still
+            counted, against whichever real street runs within 60 m.
+          </p>
+          <p class="an-note">
+            Blocks shorter than 20 m are left out too &mdash; a 6 m connector with two
+            trees is not 33 trees per 100 m of streetscape.
           </p>
         </div>
 
@@ -242,7 +250,7 @@ PAGES = [
         lede=("Trunk diameter is the only clue the inventory gives about age, so every "
               "figure here is an estimate. Click a block for the spread behind its "
               "median."),
-        loading="Loading 43,000 blocks&hellip;",
+        loading="Loading 39,000 blocks&hellip;",
         features="blocks",
         sections=METHOD,
         config="""    window.ANALYSIS = {
@@ -269,10 +277,10 @@ PAGES = [
         heading="Street trees per 100 m of street",
         description=("An interactive map of how densely Toronto's streets are planted: "
                      "street trees per 100 metres of street, for every one of the "
-                     "city's 43,000 blocks."),
-        lede=("Trees counted against the length of street they stand on, block by "
-              "block, across 5,596 km of Toronto streets."),
-        loading="Loading 43,000 blocks&hellip;",
+                     "city's 39,000 blocks."),
+        lede=('Trees counted against the length of street they stand on, block by '
+              'block, across <span data-fact="km"></span> km of Toronto streets.'),
+        loading="Loading 39,000 blocks&hellip;",
         features="blocks",
         sections=STREET_METHOD,
         config="""    window.ANALYSIS = {
