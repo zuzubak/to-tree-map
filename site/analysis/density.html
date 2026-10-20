@@ -55,27 +55,31 @@
           </nav>
           <p class="an-subtitle">
             Every census area in Toronto, plotted by how many people live on a hectare
-            against how many street trees stand on 100 m of its streets. Hover the chart
-            to read the trend at any density.
+            against how many street trees stand on 100 m of its streets. The line is the
+            average of each bin along the axis; hover it to read any density.
           </p>
           <div class="stats" id="stats"></div>
         </header>
 
         <div class="an-section">
-          <h2>The short answer</h2>
+          <h2>The shape of it</h2>
           <p class="an-note">
-            <strong>Almost nothing.</strong> Across three decades of density the trend
-            line is nearly flat and explains about 1% of the variation between areas.
-            Knowing how many people live in a Toronto neighbourhood tells you very
-            little about how densely its streets are planted.
+            <strong>Not much, until it does.</strong> The average climbs gently to about
+            15 trees per 100 m around 20 residents a hectare, runs flat near 13.5 through
+            the whole middle of the city, and then falls away above roughly 200 &mdash;
+            reaching about 8 per 100 m in the densest bin.
           </p>
           <p class="an-note">
-            The one real signal is at the top end. The dashed line is the average of each
-            tenth of areas by density: it sits between 13 and 15 trees per 100 m for nine
-            of them, then drops to about 11.6 in the densest tenth &mdash; areas above
-            roughly 176 residents per hectare. Apartment towers set back behind parking
-            and podiums have less street frontage to plant, and what frontage there is
-            tends to be arterial.
+            The fall at the top is the only part with real movement in it. Apartment
+            towers set back behind parking and podiums have less street frontage to
+            plant, and what frontage there is tends to be arterial.
+          </p>
+          <p class="an-note">
+            A straight line through this cloud would be nearly flat and would explain
+            about 1% of the variation between areas &mdash; true, but it would only be
+            telling you that no straight line describes it. The binned average is drawn
+            instead, with a mark at each bin, so the shape comes from the data rather
+            than from a model of it.
           </p>
         </div>
 
@@ -90,11 +94,16 @@
         </div>
 
         <div class="an-section">
-          <h2>Lines on the chart</h2>
+          <h2>The line</h2>
           <div class="line-key">
-            <span><i class="solid"></i>Trend line, least squares on log density</span>
-            <span><i class="dashed"></i>Average of each tenth of areas by density</span>
+            <span><i class="solid"></i>Average trees per 100 m in each density bin</span>
           </div>
+          <p class="an-note">
+            Twenty-one bins of equal width along the axis, so each covers the same
+            distance on screen. A bin holding fewer than 12 areas is left out and the
+            line breaks rather than chasing an average built on three of them &mdash;
+            which is why it starts a little in from the left edge.
+          </p>
         </div>
 
         <div class="an-section">
@@ -107,16 +116,16 @@
                   <th scope="col">Areas</th>
                   <th scope="col">Median density</th>
                   <th scope="col">Median trees</th>
-                  <th scope="col">Slope</th>
+                  <th scope="col">Densest tenth</th>
                 </tr>
               </thead>
               <tbody></tbody>
             </table>
           </div>
           <p class="an-note">
-            Density is residents per hectare and trees is per 100 m, both medians. Slope
-            is the change in trees per 100 m for a tenfold rise in density &mdash; every
-            one of them is small next to the spread within any single municipality.
+            Density is residents per hectare and trees per 100 m, both medians. The last
+            column is the average planting across that municipality's densest tenth of
+            areas, which is where the curve actually moves.
           </p>
         </div>
 

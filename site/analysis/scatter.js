@@ -60,31 +60,66 @@
 
   /* ---------------------------------------------------------------- statistics ---- */
 
-  /* Least squares of y on log10(density). Fitted in the space the chart draws, so the
-   * line on screen is the line that was fitted rather than a curve standing in for one. */
-  function fit(rows) {
-    const n = rows.length;
-    if (n < 3) return null;
-    let sx1 = 0, sy1 = 0;
-    for (const r of rows) { sx1 += Math.log10(clampX(r.x)); sy1 += r.y; }
-    const mx = sx1 / n, my = sy1 / n;
-    let sxy = 0, sxx = 0, sst = 0;
+  /* The line on the chart is the average of each x-axis bin, not a straight fit.
+   *
+   * A least-squares line through this cloud is flat and explains about 1% of the
+   * variance, which is true but tells you only that no straight line describes it. The
+   * binned average shows what is actually there: a rise to about 15 trees per 100 m
+   * around 20 residents a hectare, a long flat middle, then a steady fall above roughly
+   * 200. None of that survives being summarised as one slope.
+   *
+   * Bins are equal width in log space because the axis is logarithmic, so each covers
+   * the same distance on screen. */
+  const BINS = 21;
+  const MIN_BIN = 12;          // below this a bin's average is noise, so the line breaks
+
+  function binIndex(x) {
+    return Math.min(BINS - 1, Math.max(0,
+      Math.floor(((Math.log10(clampX(x)) - LX0) / (LX1 - LX0)) * BINS)));
+  }
+
+  function curveOf(rows) {
+    const sums = new Array(BINS).fill(0);
+    const counts = new Array(BINS).fill(0);
     for (const r of rows) {
-      const lx = Math.log10(clampX(r.x)) - mx;
-      sxy += lx * (r.y - my);
-      sxx += lx * lx;
-      sst += (r.y - my) * (r.y - my);
+      const b = binIndex(r.x);
+      sums[b] += r.y;
+      counts[b] += 1;
     }
-    if (sxx === 0) return null;
-    const slope = sxy / sxx;
-    const intercept = my - slope * mx;
-    let sse = 0;
-    for (const r of rows) {
-      const p = slope * Math.log10(clampX(r.x)) + intercept;
-      sse += (r.y - p) * (r.y - p);
+    const bins = [];
+    for (let b = 0; b < BINS; b++) {
+      const w = (LX1 - LX0) / BINS;
+      bins.push({
+        b,
+        x0: Math.pow(10, LX0 + b * w),
+        x1: Math.pow(10, LX0 + (b + 1) * w),
+        mid: Math.pow(10, LX0 + (b + 0.5) * w),
+        n: counts[b],
+        mean: counts[b] ? sums[b] / counts[b] : null,
+        enough: counts[b] >= MIN_BIN,
+      });
     }
-    return { slope, intercept, r2: sst > 0 ? 1 - sse / sst : 0, n,
-             at: (x) => slope * Math.log10(clampX(x)) + intercept };
+    return bins;
+  }
+
+  /* The drawn curve's own value at any density: linear between the two bin centres it
+   * falls between, so the crosshair always lands exactly on the line rather than near
+   * it. Null wherever the line is broken for want of data. */
+  function curveAt(bins, x) {
+    const usable = bins.filter((b) => b.enough);
+    if (!usable.length) return null;
+    const lx = Math.log10(clampX(x));
+    if (lx <= Math.log10(usable[0].mid)) return usable[0].mean;
+    const last = usable[usable.length - 1];
+    if (lx >= Math.log10(last.mid)) return last.mean;
+    for (let i = 0; i < usable.length - 1; i++) {
+      const a = usable[i], c = usable[i + 1];
+      // Adjacent in the list but not on the chart: the line is broken across the gap.
+      if (c.b !== a.b + 1) continue;
+      const la = Math.log10(a.mid), lc = Math.log10(c.mid);
+      if (lx >= la && lx <= lc) return a.mean + ((lx - la) / (lc - la)) * (c.mean - a.mean);
+    }
+    return null;
   }
 
   function median(values) {
@@ -94,36 +129,15 @@
     return v.length % 2 ? v[m] : (v[m - 1] + v[m]) / 2;
   }
 
-  /* What the areas around this density actually average, as opposed to what the line
-   * predicts. A window in log space, so it stays the same visual width everywhere on
-   * the axis rather than swallowing the whole sparse end. */
-  const WINDOW_DECADES = 0.08;
-  function observedAt(rows, x) {
-    const lx = Math.log10(clampX(x));
-    let sum = 0, n = 0;
-    for (const r of rows) {
-      if (Math.abs(Math.log10(clampX(r.x)) - lx) <= WINDOW_DECADES) { sum += r.y; n += 1; }
-    }
-    return n ? { mean: sum / n, n } : { mean: null, n: 0 };
-  }
-
-  /* Decile means, drawn as a stepped line. This is the shape the straight line cannot
-   * show: flat across nine deciles, then a drop in the densest one. */
-  function decileMeans(rows) {
-    if (rows.length < 50) return [];
+  /* Mean planting among a municipality's densest tenth of areas -- the part of the
+   * curve that actually moves. */
+  function densestTenth(rows) {
+    if (rows.length < 10) return null;
     const sorted = rows.slice().sort((a, b) => a.x - b.x);
-    const out = [];
-    for (let i = 0; i < 10; i++) {
-      const from = Math.floor((sorted.length * i) / 10);
-      const to = Math.floor((sorted.length * (i + 1)) / 10);
-      const slice = sorted.slice(from, to);
-      if (!slice.length) continue;
-      let sum = 0;
-      for (const r of slice) sum += r.y;
-      out.push({ x0: slice[0].x, x1: slice[slice.length - 1].x, mean: sum / slice.length,
-                 n: slice.length });
-    }
-    return out;
+    const tail = sorted.slice(Math.floor(sorted.length * 0.9));
+    let sum = 0;
+    for (const r of tail) sum += r.y;
+    return sum / tail.length;
   }
 
   const active = () => (isolated < 0 ? points : points.filter((p) => p.m === isolated));
@@ -217,49 +231,47 @@
     }
     ctx.globalAlpha = 1;
 
-    /* Both lines are laid down twice, once in the surface colour and wider. Over three
-     * and a half thousand points a 2 px line is just another speck in the cloud; the
-     * casing cuts it out of the scatter the way the dot halos do on the tree map. */
-    const stroke = (path, colour, width, dash) => {
-      for (const pass of [0, 1]) {
-        ctx.strokeStyle = pass ? colour : cssVar("--surface-1");
-        ctx.lineWidth = pass ? width : width + 3;
-        ctx.setLineDash(pass && dash ? dash : []);
-        ctx.lineJoin = "round";
-        ctx.beginPath();
-        path();
-        ctx.stroke();
+    /* Laid down twice, once in the surface colour and wider. Over three and a half
+     * thousand points a 2 px line is just another speck in the cloud; the casing cuts it
+     * out of the scatter the way the dot halos do on the tree map. */
+    const bins = curveOf(rows);
+    const path = () => {
+      let open = false;
+      for (const b of bins) {
+        if (!b.enough) { open = false; continue; }
+        const px = sx(b.mid), py = sy(b.mean);
+        if (open) ctx.lineTo(px, py); else ctx.moveTo(px, py);
+        open = true;
       }
-      ctx.setLineDash([]);
     };
-
-    // ---- decile means: the shape the straight line cannot show
-    const deciles = decileMeans(rows);
-    if (deciles.length) {
-      stroke(() => {
-        deciles.forEach((d, i) => {
-          const y = sy(d.mean);
-          if (i === 0) ctx.moveTo(sx(d.x0), y); else ctx.lineTo(sx(d.x0), y);
-          ctx.lineTo(sx(d.x1), y);
-        });
-      }, cssVar("--text-secondary"), 2, [5, 3]);
+    for (const pass of [0, 1]) {
+      ctx.strokeStyle = pass ? cssVar("--text-primary") : cssVar("--surface-1");
+      ctx.lineWidth = pass ? 2.5 : 5.5;
+      ctx.lineJoin = "round";
+      ctx.lineCap = "round";
+      ctx.beginPath();
+      path();
+      ctx.stroke();
     }
-
-    // ---- trendline
-    const model = fit(rows);
-    if (model) {
-      stroke(() => {
-        ctx.moveTo(sx(X_MIN), sy(model.at(X_MIN)));
-        ctx.lineTo(sx(X_MAX), sy(model.at(X_MAX)));
-      }, cssVar("--text-primary"), 2.5, null);
+    // A mark at each bin's own average, so the reader can see where the line is
+    // anchored rather than taking the shape on trust.
+    for (const b of bins) {
+      if (!b.enough) continue;
+      ctx.fillStyle = cssVar("--text-primary");
+      ctx.strokeStyle = cssVar("--surface-1");
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(sx(b.mid), sy(b.mean), 3, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.fill();
     }
 
     // ---- crosshair, locked to the trendline rather than to the pointer's own y
-    if (hoverX != null && model) {
+    const hoverY = hoverX == null ? null : curveAt(bins, xAt(hoverX));
+    if (hoverX != null && hoverY != null) {
       const x = xAt(hoverX);
       const px = Math.round(sx(x)) + 0.5;
-      const ty = model.at(x);
-      const py = Math.round(sy(ty)) + 0.5;
+      const py = Math.round(sy(hoverY)) + 0.5;
       ctx.strokeStyle = cssVar("--text-secondary");
       ctx.lineWidth = 1;
       ctx.setLineDash([3, 3]);
@@ -276,26 +288,25 @@
       ctx.fill();
       ctx.stroke();
     }
-    renderReadout(model, rows);
+    renderReadout(bins, hoverY);
   }
 
   /* ---------------------------------------------------------------- readout ------- */
 
-  function renderReadout(model, rows) {
-    if (hoverX == null || !model) { tip.hidden = true; return; }
+  function renderReadout(bins, hoverY) {
+    if (hoverX == null || hoverY == null) { tip.hidden = true; return; }
     const x = xAt(hoverX);
-    const trend = model.at(x);
-    const obs = observedAt(rows, x);
+    const bin = bins[binIndex(x)];
     const scope = isolated < 0 ? "across the city" : `in ${pretty(munis[isolated])}`;
+    const range = `${num(bin.x0, bin.x0 < 10 ? 1 : 0)}\u2013${num(bin.x1, bin.x1 < 10 ? 1 : 0)}`;
     tip.innerHTML =
       `<div class="tip-head">${num(x, x < 10 ? 1 : 0)} residents per hectare</div>`
-      + `<div class="popup-row"><span class="k">Trend line</span>`
-      + `<span class="v">${num(trend, 1)} per 100 m</span></div>`
-      + `<div class="popup-row"><span class="k">Areas near this density</span>`
-      + `<span class="v">${obs.mean == null ? "–" : num(obs.mean, 1) + " per 100 m"}</span></div>`
-      + `<div class="tip-note">${obs.n ? `average of ${num(obs.n)} areas ${scope}` : `no areas ${scope} at this density`}</div>`;
+      + `<div class="popup-row"><span class="k">Average here</span>`
+      + `<span class="v">${num(hoverY, 1)} per 100 m</span></div>`
+      + `<div class="popup-row"><span class="k">Areas in this bin</span>`
+      + `<span class="v">${num(bin.n)}</span></div>`
+      + `<div class="tip-note">bin covers ${range} residents per hectare, ${scope}</div>`;
     tip.hidden = false;
-    const p = plot();
     const left = Math.min(W - tip.offsetWidth - 8, Math.max(8, sx(x) + 14));
     tip.style.left = `${left}px`;
     tip.style.top = `${PAD.t + 8}px`;
@@ -329,17 +340,16 @@
     const body = el("muni-table").querySelector("tbody");
     const rows = munis.map((m, i) => {
       const sub = points.filter((p) => p.m === i);
-      const f = fit(sub);
       return { i, m, n: sub.length,
                d: median(sub.map((p) => p.x)),
                t: median(sub.map((p) => p.y)),
-               slope: f ? f.slope : null, r2: f ? f.r2 : null };
+               tenth: densestTenth(sub) };
     }).sort((a, b) => b.n - a.n);
     body.innerHTML = rows.map((r) => `
       <tr data-m="${r.i}" data-active="${isolated < 0 || isolated === r.i}">
         <th scope="row"><span class="swatch" style="background:${colourFor(r.i)}"></span>${esc(pretty(r.m))}</th>
         <td>${num(r.n)}</td><td>${num(r.d, 0)}</td><td>${num(r.t, 1)}</td>
-        <td>${r.slope == null ? "–" : (r.slope > 0 ? "+" : "") + num(r.slope, 1)}</td>
+        <td>${r.tenth == null ? "–" : num(r.tenth, 1)}</td>
       </tr>`).join("");
     for (const tr of body.querySelectorAll("tr")) {
       tr.addEventListener("click", () => {
@@ -355,12 +365,16 @@
 
   function renderHeadline() {
     const rows = active();
-    const model = fit(rows);
+    const bins = curveOf(rows).filter((b) => b.enough);
+    const peak = bins.length ? bins.reduce((a, b) => (b.mean > a.mean ? b : a)) : null;
+    const densest = bins.length ? bins[bins.length - 1] : null;
     const stats = [
       [num(rows.length), "Census areas"],
-      [model ? (model.slope > 0 ? "+" : "") + num(model.slope, 1) : "–", "Trees per 100 m, per 10× density"],
-      [model ? num(model.r2 * 100, 1) + "%" : "–", "Variance explained"],
       [num(median(rows.map((r) => r.y)), 1), "Median trees per 100 m"],
+      [peak ? num(peak.mean, 1) : "–",
+       peak ? `Peak average, near ${num(peak.mid, peak.mid < 10 ? 1 : 0)}/ha` : "Peak average"],
+      [densest ? num(densest.mean, 1) : "–",
+       densest ? `Densest bin, ${num(densest.x0)}+/ha` : "Densest bin"],
     ];
     el("stats").innerHTML = stats.map(([v, l]) =>
       `<div class="stat-tile"><div class="stat-value">${v}</div>`

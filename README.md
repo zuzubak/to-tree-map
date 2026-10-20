@@ -289,23 +289,27 @@ two sources, in order:
    topology leaves that end unnamed — where it named one end, the other name in the pair is
    the other end. That adds ~4,500 more, for 78% with both ends named.
 
-### Density against planting, and the answer being "no"
+### Density against planting
 
 `density.html` plots one point per census area: residents per hectare against street
-trees per 100 m, coloured by former municipality, with a least-squares trend line fitted
-on log density.
+trees per 100 m, coloured by former municipality.
 
-**The finding is a null result, and the page says so.** Across three decades of density
-the line is nearly flat and explains **0.9%** of the variance between areas. The only
-real signal is at the top: the decile means sit between 13 and 15 trees per 100 m for
-nine tenths of areas and drop to 11.6 in the densest tenth, above roughly 176 residents
-per hectare. Isolating old Toronto gives the steepest relationship anywhere in the city
-and it is still only R² 0.046.
+**The line is the average of each bin along the axis, not a fitted one.** A least-squares
+line through this cloud is nearly flat and explains 0.9% of the variance — true, but all
+it tells you is that no straight line describes the data. The binned average shows what
+is actually there: a rise to about 15 trees per 100 m around 20 residents a hectare, a
+long flat middle near 13.5, then a steady fall above roughly 200, reaching 8 per 100 m in
+the densest bin. Apartment towers set back behind parking and podiums have less street
+frontage to plant, and what there is tends to be arterial.
 
-Because a straight line through a cloud with R² 0.009 invites more confidence than it
-has earned, the chart also draws the decile means — the shape the line cannot show —
-and the hover readout gives both: what the trend predicts at that density, and what the
-areas actually sitting near it average, with how many there are.
+Twenty-one bins of equal width in log space, so each covers the same distance on the
+axis. A bin holding fewer than 12 areas is dropped and the line breaks rather than
+chasing an average built on three of them — which is also what keeps the curve honest
+when a small municipality is isolated: East York's 153 areas support three bins and it
+draws three.
+
+Hovering puts a crosshair on the curve and reports the average at that density, the bin
+it falls in and how many areas are in it.
 
 The x axis is logarithmic because density spans four and a half decades; on a linear one
 the median area sits at 0.6% of the width.
@@ -319,8 +323,8 @@ only look like they encode them (Eglinton-Lawrence spans old Toronto and North Y
 simulated deuteranopia, protanopia and tritanopia, the best six of this site's palette
 separate by 6.8 at worst against a floor of 8, and the default first six fall to 3.3 —
 two of them indistinguishable. The page uses the best-separating six and then makes sure
-nothing depends on hue: every municipality's count, medians and slope are in a table,
-and clicking either the legend or a table row isolates it.
+nothing depends on hue: every municipality's count, medians and densest-tenth average are
+in a table, and clicking either the legend or a table row isolates it.
 
 ### Why census *areas*, not census blocks
 
