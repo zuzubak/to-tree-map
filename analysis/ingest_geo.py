@@ -185,18 +185,28 @@ def main() -> None:
     ).fetchone()
     print(f"  {n:,} areas, {pop:,} residents")
 
+    # raw.street_trees, not the dbt model of the same name. The analysis models read
+    # these geo tables, so reading a dbt model here would make the two steps circular
+    # and leave a fresh warehouse unbuildable. The raw table carries the same 688,335
+    # rows with identical coordinates and street names -- the model adds parsed taxa,
+    # which the spatial joins do not use.
     print("Attaching trees")
     con.execute("DROP TABLE IF EXISTS geo.tree_location")
     con.execute(
         f"""
         CREATE TABLE geo.tree_location AS
-        SELECT object_id, tree_index, {metric('st_point(lon, lat)')} AS geom_m
-        FROM street_trees
+        SELECT object_id, {metric('st_point(lon, lat)')} AS geom_m
+        FROM raw.street_trees
         """
     )
-    con.execute("CREATE INDEX tl_idx ON geo.tree_location USING RTREE (geom_m)")
-    con.execute("CREATE INDEX da_idx ON geo.dissemination_areas USING RTREE (geom_m)")
-    con.execute("CREATE INDEX ss_idx ON geo.street_segments USING RTREE (geom_m)")
+    # Schema-qualified: an unqualified DROP INDEX looks in main and silently does
+    # nothing to an index that lives in geo, which then makes the CREATE fail on any
+    # second run against an existing warehouse.
+    for name, table in [("tl_idx", "geo.tree_location"),
+                        ("da_idx", "geo.dissemination_areas"),
+                        ("ss_idx", "geo.street_segments")]:
+        con.execute(f"DROP INDEX IF EXISTS geo.{name}")
+        con.execute(f"CREATE INDEX {name} ON {table} USING RTREE (geom_m)")
 
     con.execute("DROP TABLE IF EXISTS geo.tree_area")
     con.execute(
@@ -208,7 +218,7 @@ def main() -> None:
         """
     )
     got = con.execute("SELECT count(*) FROM geo.tree_area").fetchone()[0]
-    total = con.execute("SELECT count(*) FROM street_trees").fetchone()[0]
+    total = con.execute("SELECT count(*) FROM raw.street_trees").fetchone()[0]
     print(f"  in a dissemination area: {got:,} of {total:,} ({got/total*100:.1f}%)")
 
     # Nearest street segment, name first.
@@ -233,7 +243,7 @@ def main() -> None:
         CREATE TABLE geo.tree_segment AS
         WITH tree AS (
             SELECT t.object_id, {norm.format(c='t.street_name')} AS nm, l.geom_m
-            FROM street_trees t JOIN geo.tree_location l USING (object_id)
+            FROM raw.street_trees t JOIN geo.tree_location l USING (object_id)
             WHERE t.street_name IS NOT NULL
         ),
         seg AS (
@@ -255,9 +265,7 @@ def main() -> None:
     print(f"  matched on street name: {by_name:,} ({by_name/total*100:.1f}%)")
 
     # Whatever is left gets a bounded spatial search. st_intersects against a buffered
-    # point DOES use the RTree, so this stays tractable on the remainder.
-    con.execute("DROP INDEX IF EXISTS ss_idx")
-    con.execute("CREATE INDEX ss_idx ON geo.street_segments USING RTREE (geom_m)")
+    # point DOES use the RTree built above, so this stays tractable on the remainder.
     con.execute(
         f"""
         INSERT INTO geo.tree_segment
