@@ -19,6 +19,7 @@ NAV = [
     ("age.html", "Estimated age"),
     ("canopy.html", "Canopy cover"),
     ("density.html", "Population density scatter"),
+    ("paving.html", "Paved surface scatter"),
     ("parking.html", "Front-yard parking"),
 ]
 
@@ -313,6 +314,28 @@ SCATTERS = [
       xShort: "/ha",
       xDecimals: 0,%Y%
       bins: 21,
+      minBin: 12,
+    };""",
+    ),
+    dict(
+        slug="paving",
+        title="Paved Surface vs Canopy",
+        heading="Paved surface scatter",
+        description="Hard paved surface other than roads against tree canopy cover, for every census block in Toronto.",
+        loading="Loading 3,570 census blocks&hellip;",
+        xbin="paving", xcol="Median paved", ycol="Median canopy",
+        sources=CANOPY_SOURCE + CENSUS_SOURCE + BOUNDARY_SOURCE,
+        config="""    window.SCATTER = {
+      xKey: "paved",
+      xScale: "linear",
+      xMin: 0,
+      xMax: 60,
+      ticks: [0, 10, 20, 30, 40, 50, 60],
+      xLabel: "Paved surface other than road, % of block area",
+      xUnit: "paved surface",
+      xShort: "% paved",
+      xDecimals: 0,%Y%
+      bins: 15,
       minBin: 12,
     };""",
     ),

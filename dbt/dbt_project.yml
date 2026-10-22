@@ -30,6 +30,9 @@ seeds:
       +column_types:
         dauid: varchar
         canopy_m2: double
+    da_landcover:
+      +column_types:
+        dauid: varchar
     name_corrections:
       +column_types:
         raw_lower: varchar

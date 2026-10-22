@@ -207,8 +207,12 @@ def main() -> None:
         """
         SELECT m.dauid, m.municipality, m.people_per_ha, m.trees_per_100m,
                m.population, m.tree_count, m.area_ha, m.street_m, w.ward_name,
-               m.parking_per_100m, m.parking_spaces, m.canopy_pct
+               m.parking_per_100m, m.parking_spaces, m.canopy_pct,
+               m.paved_pct, m.building_pct,
+               round(st_y(st_centroid(d.geom_wgs)), 5) AS lat,
+               round(st_x(st_centroid(d.geom_wgs)), 5) AS lon
         FROM da_metrics m
+        JOIN geo.dissemination_areas d USING (dauid)
         LEFT JOIN (
             SELECT a.dauid, mode(t.ward_name) AS ward_name
             FROM geo.tree_area a JOIN street_trees t USING (object_id)
@@ -242,7 +246,8 @@ def main() -> None:
             {"id": r[0], "m": muni_ix[r[1]],
              "x": r[2] if (r[4] or 0) > 0 else None, "y": r[3], "pop": r[4],
              "n": r[5], "ha": r[6], "street": int(r[7]), "ward": r[8],
-             "park": r[9], "spaces": r[10], "cpct": r[11]}
+             "park": r[9], "spaces": r[10], "cpct": r[11],
+             "paved": r[12], "bld": r[13], "lat": r[14], "lon": r[15]}
             for r in pts
         ],
     }

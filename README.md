@@ -243,6 +243,7 @@ because they differ only in which number they colour by.
 | `age.html` | street block | median estimated age |
 | `canopy.html` | census block | tree canopy cover, % of block area |
 | `density.html` | census block | population density vs canopy (scatter) |
+| `paving.html` | census block | paved surface vs canopy (scatter) |
 | `parking.html` | census block | licensed front-yard parking vs canopy (scatter) |
 
 ### Estimated age, and why it is only an estimate
@@ -315,10 +316,18 @@ fixed 2018 snapshot redone about every ten years, the source is a 436 MB downloa
 the intersection is slow. None of that belongs in a job that runs weekly to pick up new
 tree records.
 
-### The two scatters
+### The scatters
 
-Both plot one point per census block, coloured by former municipality, with the line
-being **the average of each bin along the x axis, not a fitted one**. A least-squares
+Each plots one point per census block, coloured by former municipality, with the line
+being **the average of each bin along the x axis, not a fitted one**. Hovering a point
+identifies the block and links out to it on Google Maps.
+
+`paving.html` is the strongest relationship in the whole project: hard surface that is
+not road — parking, driveways, hardstanding — against canopy. Blocks under 8% paved
+average 56.2% canopy; blocks over 44% paved average 6.3%. Holding density constant the
+partial correlation is **−0.63**, against income's +0.39 and density's own near-zero
+within the 30–120 people/hectare band. `analysis/make_landcover.py` derives the surface
+shares, the companion to make_canopy.py. A least-squares
 line invites more confidence than this data has earned; the binned average shows the
 shape instead. Bins holding fewer than 12 blocks are dropped and the line breaks rather
 than chasing noise.

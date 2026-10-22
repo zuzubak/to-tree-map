@@ -25,6 +25,7 @@
   let munis = [];
   let isolated = -1;           // municipality index, or -1 for all
   let hoverX = null;           // pointer position in canvas CSS px
+  let hoverPt = null;          // the block under the cursor, if any
   let canvas, ctx, tip, dpr = 1, W = 0, H = 0;
 
   const el = (id) => document.getElementById(id);
@@ -148,6 +149,25 @@
   }
 
   const active = () => (isolated < 0 ? points : points.filter((p) => p.m === isolated));
+
+  /* Nearest block to the cursor, in screen space so the hit radius is the same
+   * everywhere regardless of how the axes are scaled. Linear scan: 3,500 points is
+   * nothing next to the work of drawing them. */
+  const HIT_RADIUS = 14;
+  function nearest(px, py) {
+    const rows = active();
+    let best = null, bestD = HIT_RADIUS * HIT_RADIUS;
+    for (const p of rows) {
+      const dx = sx(p.x) - px, dy = sy(p.y) - py;
+      const d = dx * dx + dy * dy;
+      if (d < bestD) { bestD = d; best = p; }
+    }
+    return best;
+  }
+
+  function mapsUrl(p) {
+    return `https://www.google.com/maps/search/?api=1&query=${p.lat},${p.lon}`;
+  }
 
   /* ---------------------------------------------------------------- drawing ------- */
 
@@ -274,50 +294,38 @@
     }
 
     // ---- crosshair, locked to the trendline rather than to the pointer's own y
-    const hoverY = hoverX == null ? null : curveAt(bins, xAt(hoverX));
-    if (hoverX != null && hoverY != null) {
-      const x = xAt(hoverX);
-      const px = Math.round(sx(x)) + 0.5;
-      const py = Math.round(sy(hoverY)) + 0.5;
-      ctx.strokeStyle = cssVar("--text-secondary");
-      ctx.lineWidth = 1;
-      ctx.setLineDash([3, 3]);
-      ctx.beginPath();
-      ctx.moveTo(px, PAD.t); ctx.lineTo(px, PAD.t + p.h);
-      ctx.moveTo(PAD.l, py); ctx.lineTo(PAD.l + p.w, py);
-      ctx.stroke();
-      ctx.setLineDash([]);
-      ctx.fillStyle = cssVar("--surface-1");
+    if (hoverPt) {
+      const px = sx(hoverPt.x), py = sy(hoverPt.y);
+      ctx.strokeStyle = cssVar("--surface-1");
+      ctx.lineWidth = 4;
+      ctx.beginPath(); ctx.arc(px, py, 6, 0, Math.PI * 2); ctx.stroke();
       ctx.strokeStyle = cssVar("--text-primary");
       ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.arc(px, py, 4, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.stroke();
+      ctx.beginPath(); ctx.arc(px, py, 6, 0, Math.PI * 2); ctx.stroke();
     }
-    renderReadout(bins, hoverY);
+
+    renderReadout();
   }
 
   /* ---------------------------------------------------------------- readout ------- */
 
-  function renderReadout(bins, hoverY) {
-    if (hoverX == null || hoverY == null) { tip.hidden = true; return; }
-    const x = xAt(hoverX);
-    const bin = bins[binIndex(x)];
-    const scope = isolated < 0 ? "across the city" : `in ${pretty(munis[isolated])}`;
-    const d = CONF.xDecimals;
-    const range = `${num(bin.x0, d)}\u2013${num(bin.x1, d)}`;
+  function renderReadout() {
+    if (!hoverPt) { tip.hidden = true; return; }
+    const p = hoverPt;
+    const row = (k, v) => `<div class="popup-row"><span class="k">${esc(k)}</span>`
+                        + `<span class="v">${v}</span></div>`;
     tip.innerHTML =
-      `<div class="tip-head">${num(x, d)} ${esc(CONF.xUnit)}</div>`
-      + `<div class="popup-row"><span class="k">Average here</span>`
-      + `<span class="v">${num(hoverY, 1)}${CONF.ySuffix} ${esc(CONF.yShort)}</span></div>`
-      + `<div class="popup-row"><span class="k">Areas in this bin</span>`
-      + `<span class="v">${num(bin.n)}</span></div>`
-      + `<div class="tip-note">bin covers ${range} ${esc(CONF.xUnit)}, ${scope}</div>`;
+      `<div class="tip-head">${esc(p.ward || "Block " + p.id)}</div>`
+      + `<div class="popup-cross">${esc(pretty(munis[p.m]))} &middot; `
+      + `${num(p.ha, 1)} ha &middot; ${num(p.pop)} residents</div>`
+      + row(CONF.xUnit, num(p.x, CONF.xDecimals))
+      + row(`${CONF.yShort}`, `${num(p.y, 1)}${CONF.ySuffix}`)
+      + row("Street trees", num(p.n))
+      + `<div class="tip-note">click to open in Google Maps</div>`;
     tip.hidden = false;
-    const left = Math.min(W - tip.offsetWidth - 8, Math.max(8, sx(x) + 14));
-    tip.style.left = `${left}px`;
-    tip.style.top = `${PAD.t + 8}px`;
+    const px = sx(p.x), py = sy(p.y);
+    tip.style.left = `${Math.min(W - tip.offsetWidth - 8, Math.max(8, px + 16))}px`;
+    tip.style.top = `${Math.min(H - tip.offsetHeight - 8, Math.max(8, py - 12))}px`;
   }
 
   /* ---------------------------------------------------------------- panel --------- */
@@ -423,19 +431,22 @@
     ctx = canvas.getContext("2d");
     tip = el("tip");
 
-    canvas.addEventListener("mousemove", (e) => {
+    const track = (clientX, clientY) => {
       const b = canvas.getBoundingClientRect();
-      const x = e.clientX - b.left;
-      hoverX = x >= PAD.l && x <= W - PAD.r ? x : null;
+      const px = clientX - b.left, py = clientY - b.top;
+      hoverX = px >= PAD.l && px <= W - PAD.r ? px : null;
+      hoverPt = hoverX == null ? null : nearest(px, py);
+      canvas.style.cursor = hoverPt ? "pointer" : "default";
       draw();
+    };
+    canvas.addEventListener("mousemove", (e) => track(e.clientX, e.clientY));
+    canvas.addEventListener("mouseleave", () => { hoverX = null; hoverPt = null; draw(); });
+    canvas.addEventListener("click", () => {
+      if (hoverPt) window.open(mapsUrl(hoverPt), "_blank", "noopener");
     });
-    canvas.addEventListener("mouseleave", () => { hoverX = null; draw(); });
-    // Touch: a tap parks the crosshair where it landed rather than needing a hover.
+    // Touch: a tap selects the nearest block and shows its readout.
     canvas.addEventListener("touchmove", (e) => {
-      const b = canvas.getBoundingClientRect();
-      const x = e.touches[0].clientX - b.left;
-      hoverX = x >= PAD.l && x <= W - PAD.r ? x : null;
-      draw();
+      track(e.touches[0].clientX, e.touches[0].clientY);
     }, { passive: true });
 
     window.addEventListener("resize", resize);

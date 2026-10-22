@@ -64,6 +64,14 @@ select
     -- what is rooted in it, and it can exceed what any count of trunks would suggest.
     case when a.area_m2 > 0 and c.canopy_m2 is not null
          then round(100.0 * c.canopy_m2 / a.area_m2, 2) end as canopy_pct,
+    -- Surface shares from the same 2018 study. "other paved" is everything hard that
+    -- is not a road: parking, driveways, hardstanding. It is the strongest single
+    -- correlate of canopy once density is held constant, and unlike density it is
+    -- something a by-law can act on.
+    case when a.area_m2 > 0 and lcv.other_m2 is not null
+         then round(100.0 * lcv.other_m2 / a.area_m2, 2) end as paved_pct,
+    case when a.area_m2 > 0 and lcv.building_m2 is not null
+         then round(100.0 * lcv.building_m2 / a.area_m2, 2) end as building_pct,
     -- Residents per hectare: the density axis of the scatter.
     case when a.area_m2 > 0
          then round(a.population / (a.area_m2 / 10000.0), 2) end as people_per_ha,
@@ -87,3 +95,4 @@ left join {{ source('geo', 'da_municipality') }} m using (dauid)
 left join {{ source('geo', 'segment_area') }} s using (dauid)
 left join parking k using (dauid)
 left join {{ ref('da_canopy') }} c using (dauid)
+left join {{ ref('da_landcover') }} lcv using (dauid)

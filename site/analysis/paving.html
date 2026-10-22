@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Paved Surface vs Canopy</title>
+  <meta name="description" content="Hard paved surface other than roads against tree canopy cover, for every census block in Toronto.">
+  <link rel="canonical" href="https://malcolmkennedy.com/to-tree-map/analysis/paving.html">
+  <!-- Unlisted while these are still being worked on: reachable by URL, but kept
+       out of search results and not linked from the tree map. -->
+  <meta name="robots" content="noindex, nofollow">
+
+  <meta name="theme-color" content="#ffffff">
+  <link rel="stylesheet" href="../style.css">
+  <link rel="stylesheet" href="analysis.css">
+</head>
+<body data-ramp="muni">
+<script src="/header.js"></script>
+  <div class="app">
+    <main id="chart-pane">
+      <div class="chart-box">
+        <canvas id="chart"></canvas>
+        <div class="chart-tip" id="tip" hidden></div>
+      </div>
+      <div class="map-badge" id="loading-badge">
+        <span class="spinner" aria-hidden="true"></span>
+        <span>Loading 3,570 census blocks&hellip;</span>
+      </div>
+    </main>
+
+    <aside class="panel" id="panel">
+      <div class="panel-handle-row">
+        <button class="panel-drag-handle" id="panel-toggle" aria-label="Toggle panel" aria-expanded="false">
+          <span class="handle-bar"></span>
+          <span class="handle-label">Stats &amp; legend</span>
+        </button>
+        <button class="panel-hide-btn" id="panel-hide" aria-label="Hide panel and show chart">
+          Hide &#9660;
+        </button>
+      </div>
+
+      <div class="panel-scroll">
+        <header class="panel-header">
+          <h1>Paved surface scatter</h1>
+          <nav class="an-nav" aria-label="Analyses"><a href="../">All 688,335 trees</a><a href="age.html">Estimated age</a><a href="canopy.html">Canopy cover</a><a href="density.html">Population density scatter</a><a href="paving.html" aria-current="page">Paved surface scatter</a><a href="parking.html">Front-yard parking</a></nav>
+          <div class="stats" id="stats"></div>
+        </header>
+
+        <div class="an-section">
+          <h2>The line</h2>
+          <div class="line-key">
+            <span><i class="solid"></i>Average of each paving bin</span>
+          </div>
+        </div>
+
+        <div class="an-section">
+          <h2>Former municipality</h2>
+          <div class="muni-legend" id="legend"></div>
+        </div>
+
+        <div class="an-section">
+          <h2>By municipality</h2>
+          <div class="table-scroll">
+            <table id="muni-table">
+              <thead>
+                <tr>
+                  <th scope="col">Municipality</th>
+                  <th scope="col">Blocks</th>
+                  <th scope="col">Median paved</th>
+                  <th scope="col">Median canopy</th>
+                  <th scope="col">Top tenth</th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="an-section">
+          <h2>Sources</h2>
+          <ul class="an-sources"><li><a href="https://open.toronto.ca/dataset/forest-and-land-cover/">Forest and Land Cover</a>, 2018 Tree Canopy Study, City of Toronto</li><li><a href="https://www150.statcan.gc.ca/n1/en/catalogue/98100015">Census of Population, 2021</a>, Statistics Canada</li><li><a href="https://open.toronto.ca/dataset/former-municipality-boundaries/">Former Municipality Boundaries</a>, City of Toronto</li></ul>
+        </div>
+      </div>
+    </aside>
+  </div>
+
+  <script src="../panel.js"></script>
+  <script>
+    window.SCATTER = {
+      xKey: "paved",
+      xScale: "linear",
+      xMin: 0,
+      xMax: 60,
+      ticks: [0, 10, 20, 30, 40, 50, 60],
+      xLabel: "Paved surface other than road, % of block area",
+      xUnit: "paved surface",
+      xShort: "% paved",
+      xDecimals: 0,
+      yKey: "cpct",
+      yMax: 80,
+      yLabel: "Tree canopy, % of block area",
+      yShort: "canopy",
+      ySuffix: "%",
+      bins: 15,
+      minBin: 12,
+    };
+  </script>
+  <script src="scatter.js"></script>
+
+  <!-- Pageview counts only (GoatCounter): no cookies, so no consent banner needed. -->
+  <script data-goatcounter="https://zuzubak.goatcounter.com/count"
+          async src="//gc.zgo.at/count.js"></script>
+</body>
+</html>
