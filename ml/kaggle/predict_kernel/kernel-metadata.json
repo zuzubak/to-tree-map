@@ -1,0 +1,13 @@
+{
+  "id": "zuzubak/toronto-tree-species-predict",
+  "title": "toronto-tree-species-predict",
+  "code_file": "predict.py",
+  "language": "python",
+  "kernel_type": "script",
+  "is_private": true,
+  "enable_gpu": true,
+  "enable_internet": true,
+  "dataset_sources": ["zuzubak/toronto-tree-points"],
+  "competition_sources": [],
+  "kernel_sources": ["zuzubak/toronto-tree-species-train"]
+}

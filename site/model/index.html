@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Toronto Trees from the Air</title>
+  <meta name="description" content="A model's guess at the genus and species of 1.4 million Toronto trees, read from the City's 2025 aerial photos.">
+  <!-- Unlisted experiment: reachable by URL, kept out of search results, not linked from the map. -->
+  <meta name="robots" content="noindex, nofollow">
+  <meta name="theme-color" content="#ffffff">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+  <link rel="stylesheet" href="../style.css">
+  <link rel="stylesheet" href="../analysis/analysis.css">
+  <link rel="stylesheet" href="model.css">
+</head>
+<body>
+<script src="/header.js"></script>
+  <div class="app">
+    <main id="map-pane">
+      <div id="map"></div>
+      <div id="search" class="map-search"></div>
+      <div class="tree-tip" id="tip" hidden></div>
+      <div class="map-badge" id="loading-badge">
+        <span class="spinner" aria-hidden="true"></span>
+        <span id="loading-text">Loading 1.4 million trees&hellip;</span>
+      </div>
+    </main>
+
+    <aside class="panel" id="panel">
+      <div class="panel-handle-row">
+        <button class="panel-drag-handle" id="panel-toggle" aria-label="Toggle panel" aria-expanded="false">
+          <span class="handle-bar"></span>
+          <span class="handle-label">Legend &amp; filters</span>
+        </button>
+        <button class="panel-hide-btn" id="panel-hide" aria-label="Hide panel and show map">
+          Hide &#9660;
+        </button>
+      </div>
+
+      <div class="panel-scroll">
+        <header class="panel-header">
+          <h1>Toronto trees from the air</h1>
+          <nav class="an-nav" aria-label="Maps"><a href="../">Street tree inventory map</a></nav>
+          <div class="stats" id="stats"></div>
+        </header>
+
+        <p class="md-note">Every dot is a tree. Its colour is a machine-learning model&rsquo;s guess at the genus,
+          read from the City&rsquo;s 2025 aerial photos. These are guesses, not records. Click a tree to see
+          how sure the model is, and what the City&rsquo;s inventory says where it has one.</p>
+
+        <div class="an-section">
+          <h2>Show</h2>
+          <select id="focus" class="md-select" aria-label="Show only one genus or species"></select>
+          <label class="md-slider">
+            <span>Hide guesses below <b id="conf-val">0%</b> confidence</span>
+            <input type="range" id="conf" min="0" max="90" step="10" value="0">
+          </label>
+        </div>
+
+        <div class="an-section">
+          <h2 id="legend-title">Predicted genus</h2>
+          <div class="md-legend" id="legend"></div>
+        </div>
+
+        <div class="an-section">
+          <h2>How good is it?</h2>
+          <p class="md-note">Tested on City street trees in neighbourhoods it never trained on, the model names the
+            right genus 76% of the time and the right species 76% of the time (for the 28 species it knows).
+            It does worse on trees unlike its training data. Against the Annex Neighbourwoods volunteer survey it got
+            47% of City-owned trees and 26% of private trees right. Northwest Toronto was photographed before
+            the leaves were out, and accuracy there drops to 63%. Ravine and park woodland looks nothing like the
+            street trees it learned from, and it calls much of it ash; treat guesses there with suspicion.</p>
+          <p class="md-note">Tree locations are the City&rsquo;s topographic tree points (2021), plus street trees from the
+            inventory that have no topographic point nearby. The model only knows 23 genera; anything else is &ldquo;other&rdquo;.</p>
+        </div>
+
+        <div class="an-section">
+          <h2>Sources</h2>
+          <ul class="an-sources">
+            <li><a href="https://gis.toronto.ca/arcgis/rest/services/basemap/cot_ortho_2025_color_8cm/MapServer">2025 orthophoto, 8 cm</a>, City of Toronto</li>
+            <li><a href="https://open.toronto.ca/dataset/topographic-mapping-physical-location-of-trees/">Topographic Mapping &ndash; Physical Location of Trees</a>, City of Toronto</li>
+            <li><a href="https://open.toronto.ca/dataset/street-tree-data/">Street Tree Data</a>, City of Toronto</li>
+          </ul>
+        </div>
+      </div>
+    </aside>
+  </div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="../panel.js"></script>
+  <script src="/map-search.js"></script>
+  <script src="model.js"></script>
+</body>
+</html>

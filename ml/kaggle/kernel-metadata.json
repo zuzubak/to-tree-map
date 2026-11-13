@@ -1,0 +1,13 @@
+{
+  "id": "zuzubak/toronto-tree-species-train",
+  "title": "toronto-tree-species-train",
+  "code_file": "train.py",
+  "language": "python",
+  "kernel_type": "script",
+  "is_private": true,
+  "enable_gpu": true,
+  "enable_internet": false,
+  "dataset_sources": ["zuzubak/toronto-tree-crops-2025", "zuzubak/timm-convnext-tiny-in22k"],
+  "competition_sources": [],
+  "kernel_sources": []
+}
