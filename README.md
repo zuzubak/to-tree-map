@@ -444,7 +444,7 @@ dropped 90 days after a decision.
 
 `python corrections/dev_server.py` runs the whole loop on localhost with a fake inbox
 and a local rebuild. Deploying the Worker needs Node 18+ and `npx wrangler deploy` from
-`corrections/worker/`; its secrets (`RESEND_API_KEY`, `GITHUB_TOKEN`, `REVIEW_SECRET`,
+`corrections/worker/`; its secrets (`REVIEWER_EMAIL`, `RESEND_API_KEY`, `GITHUB_TOKEN`, `REVIEW_SECRET`,
 `TURNSTILE_SECRET`) are set with `wrangler secret put`. The GitHub token is fine-grained,
 limited to this repo's contents, and expires: when it does, approvals fail with an
 error and the report stays pending until a new one is set.

@@ -281,7 +281,7 @@ async function sendMail(env, subj, html, replyTo) {
   const resp = await fetch("https://api.resend.com/emails", {
     method: "POST",
     headers: { authorization: `Bearer ${env.RESEND_API_KEY}`, "content-type": "application/json" },
-    body: JSON.stringify({ from: env.MAIL_FROM, to: [env.REVIEWER], subject: subj, html, ...(replyTo ? { reply_to: replyTo } : {}) }),
+    body: JSON.stringify({ from: env.MAIL_FROM, to: [env.REVIEWER_EMAIL], subject: subj, html, ...(replyTo ? { reply_to: replyTo } : {}) }),
   });
   // The report is already saved; a failed email is logged, not shown to the reader.
   if (!resp.ok) console.error("resend", resp.status, await resp.text());

@@ -48,7 +48,8 @@ SEED = ROOT / "dbt" / "seeds" / "tree_corrections.csv"
 PY = sys.executable
 PORT = 8000
 
-REVIEWER = "mkennedytoronto@gmail.com"
+# Only a label here: nothing is actually sent. The real address is the Worker secret REVIEWER_EMAIL.
+REVIEWER = os.environ.get("REVIEWER_EMAIL", "the reviewer")
 PUBLIC_MAP = "https://malcolmkennedy.com/to-tree-map/"
 KINDS = {"remove", "species", "dbh", "address", "other"}
 APPLY_KINDS = ("remove", "species", "dbh", "address")

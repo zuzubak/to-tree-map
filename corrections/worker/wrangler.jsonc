@@ -21,10 +21,9 @@
   // Daily: forget reporters' email addresses 90 days after a decision, and old rate-limit hits.
   "triggers": { "crons": ["17 9 * * *"] },
 
-  // Public settings. Secrets (RESEND_API_KEY, GITHUB_TOKEN, REVIEW_SECRET,
+  // Public settings. Secrets (REVIEWER_EMAIL, RESEND_API_KEY, GITHUB_TOKEN, REVIEW_SECRET,
   // TURNSTILE_SECRET) are set with `wrangler secret put`, never written here.
   "vars": {
-    "REVIEWER": "mkennedytoronto@gmail.com",
     // Resend's shared sender works without verifying a domain, but only delivers to the
     // address the Resend account was opened with -- which is exactly who it mails.
     "MAIL_FROM": "Toronto tree map <onboarding@resend.dev>",
