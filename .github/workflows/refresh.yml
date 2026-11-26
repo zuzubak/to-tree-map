@@ -2,9 +2,10 @@ name: Refresh street tree data
 
 on:
   schedule:
-    # 06:00-07:00 America/Toronto, Mondays. The City refreshes this dataset "as available"
-    # (it has gone months between updates), so a daily run would almost always be a no-op.
-    - cron: "0 11 * * 1"
+    # ~06:00-07:00 America/Toronto, daily, like the multiplex map. The City refreshes this
+    # dataset "as available" (June 4, then Nov 23, 2026), on no fixed day, so the run checks
+    # every morning and the `check` job skips the build unless the City's stamp has moved.
+    - cron: "0 11 * * *"
   workflow_dispatch: {}
   push:
     branches: [master]
@@ -17,7 +18,29 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # Compares the City's last_refreshed stamp with the one in the live trees.meta.json.
+  # Pushes and manual runs always build; only the daily schedule is gated on this.
+  check:
+    runs-on: ubuntu-latest
+    outputs:
+      stale: ${{ steps.freshness.outputs.stale }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install requests
+        run: pip install requests
+
+      - id: freshness
+        name: Compare City refresh stamp with the live site
+        run: python ingest/check_freshness.py
+
   build:
+    needs: check
+    if: github.event_name != 'schedule' || needs.check.outputs.stale == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: read

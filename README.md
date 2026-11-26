@@ -2,7 +2,7 @@
 
 An interactive map of all ~688,000 trees in the City of Toronto's street tree inventory,
 coloured by whether each one is native to Ontario, by trunk size, or by species — and
-filterable by all of those. Built from Toronto Open Data, rebuilt weekly.
+filterable by all of those. Built from Toronto Open Data, rebuilt whenever the City refreshes it.
 
 Inspired by the [NYC Parks tree map](https://www.nycgovparks.org/tree-map/) and
 [nyctreegenusmap.com](https://nyctreegenusmap.com/).
@@ -52,8 +52,16 @@ site/      -> a Leaflet map with a Canvas2D overlay that draws all 688k points
 site/analysis/ -> three choropleths over the same shared stylesheet and basemap
 ```
 
-A GitHub Actions workflow (`.github/workflows/refresh.yml`) runs the whole chain weekly and
-deploys `site/` straight to Pages as an artifact.
+A GitHub Actions workflow (`.github/workflows/refresh.yml`) checks every morning whether the
+City has refreshed the inventory, and if it has, runs the whole chain and deploys `site/`
+straight to Pages as an artifact. The City publishes "as available", on no fixed schedule,
+so the first job compares the dataset's `last_refreshed` stamp with the one in the live
+`trees.meta.json` and the build only runs when they differ. Because it compares against
+what is actually deployed, a run that builds but fails to deploy is retried the next day.
+Pushes to `master` and manual runs always build.
+
+The live payload URL is hardcoded in `ingest/check_freshness.py`, alongside the canonical
+URL in `site/index.html`; keep both in sync if the site moves.
 
 ## Data source
 
@@ -313,7 +321,7 @@ from per-tree trunk diameter and canopy has no per-tree attributes.
 `analysis/make_canopy.py` cuts the canopy patches against census blocks and writes
 `dbt/seeds/da_canopy.csv`. It is run by hand and its output is committed: the study is a
 fixed 2018 snapshot redone about every ten years, the source is a 436 MB download, and
-the intersection is slow. None of that belongs in a job that runs weekly to pick up new
+the intersection is slow. None of that belongs in a job that runs on every City refresh to pick up new
 tree records.
 
 ### The scatters
@@ -425,7 +433,7 @@ canvas instead of CARTO, so there's nothing to set up. To develop against the re
 ## Deploying
 
 The workflow builds and deploys on its own; set **Settings → Pages → Source → GitHub
-Actions** and either wait for the weekly run or trigger it from the Actions tab. With the
+Actions** and either wait for the next City refresh or trigger it from the Actions tab. With the
 user Pages site on a custom domain, this repo is served at
 `malcolmkennedy.com/to-tree-map`, which is also what makes the root-relative `/header.js`
 resolve.
