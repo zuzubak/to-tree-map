@@ -431,6 +431,16 @@ the build warn and show in orange at `/corrections` on the Worker. A vanished ST
 falls back to a fingerprint (species, address, position within ~3 m), used only when it
 picks out exactly one tree.
 
+**Readers can add a missing tree** with the "Add a missing tree" button: tap where the
+trunk is, confirm it stands between the curb and the property line (the City's
+inventory stops there; private trees are out of scope), then give species, trunk and
+address. An approved addition gets an id of its own, `R-<report id>`, and stays until
+the City adds the tree itself. That is judged by address rather than distance, since
+the City puts its dot on the parcel 10–25 m from the trunk: each addition records how
+many trees of its genus the City had at that address, and one more after a refresh
+retires it. If the reviewer changes the address that count no longer applies, so it is
+stored as -1 and the addition is never retired automatically.
+
 **An address fix moves the dot**, since the City places trees by address. The new spot
 comes from the City's own geocoder, the one behind map.toronto.ca, keeping the tree's
 offset from its old address point so the dot stays at the curb; the review page has a

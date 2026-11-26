@@ -1,1 +1,1 @@
-correction_id,struct_id,kind,approved_at,snap_botanical,snap_dbh_cm,snap_address,snap_street,snap_lon,snap_lat,new_botanical,new_dbh_cm,new_address,new_street,new_lon,new_lat,new_ward,note
+correction_id,struct_id,kind,approved_at,snap_botanical,snap_dbh_cm,snap_address,snap_street,snap_lon,snap_lat,new_botanical,new_dbh_cm,new_address,new_street,new_lon,new_lat,new_ward,snap_count,note

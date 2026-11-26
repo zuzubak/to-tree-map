@@ -26,6 +26,7 @@ import csv
 import hashlib
 import hmac
 import html
+import io
 import json
 import re
 import secrets
@@ -51,13 +52,13 @@ PORT = 8000
 # Only a label here: nothing is actually sent. The real address is the Worker secret REVIEWER_EMAIL.
 REVIEWER = os.environ.get("REVIEWER_EMAIL", "the reviewer")
 PUBLIC_MAP = "https://malcolmkennedy.com/to-tree-map/"
-KINDS = {"remove", "species", "dbh", "address", "other"}
+KINDS = {"remove", "species", "dbh", "address", "other", "add"}
 APPLY_KINDS = ("remove", "species", "dbh", "address")
 SEED_COLS = [
     "correction_id", "struct_id", "kind", "approved_at",
     "snap_botanical", "snap_dbh_cm", "snap_address", "snap_street", "snap_lon", "snap_lat",
     "new_botanical", "new_dbh_cm", "new_address", "new_street", "new_lon", "new_lat", "new_ward",
-    "note",
+    "snap_count", "note",
 ]
 DBT_SELECT = ("tree_corrections int_tree_corrections int_street_trees dim_taxa street_trees "
               "tree_stats_by_ward tree_stats_overall")
@@ -156,7 +157,8 @@ def taxa_index() -> dict:
 
 # ---------------------------------------------------------------- validation ---------
 
-STRUCT_RE = re.compile(r"^[A-Z]{0,3}\d{1,8}$")
+# A City STRUCTID, or R-<report id> for a tree a reader added.
+STRUCT_RE = re.compile(r"^(?:[A-Z]{0,3}\d{1,8}|R-[0-9a-f]{8})$")
 EMAIL_RE = re.compile(r"^[^@\s]{1,100}@[^@\s]{1,100}\.[^@\s]{2,}$")
 
 
@@ -168,7 +170,7 @@ def validate(body: dict) -> tuple[dict | None, str | None]:
     if kind not in KINDS:
         return None, "unknown problem type"
     sid = str(tree.get("struct_id") or "")
-    if not STRUCT_RE.match(sid):
+    if kind != "add" and not STRUCT_RE.match(sid):
         return None, "missing tree id"
     try:
         lat, lon = float(tree["lat"]), float(tree["lon"])
@@ -212,6 +214,27 @@ def validate(body: dict) -> tuple[dict | None, str | None]:
         clean_prop.update(address=a, street=st.upper())
         # Placed here, not trusted from the browser: the form's lookup is only a preview.
         clean_prop["place"] = place(a, st, (lat, lon), i(tree.get("address")), s(tree.get("street")))
+    elif kind == "add":
+        clean_prop["unsure"] = bool(proposed.get("unsure"))
+        clean_prop["botanical"] = None if clean_prop["unsure"] else s(proposed.get("botanical"))
+        if not clean_prop["unsure"] and clean_prop["botanical"] not in taxa_index():
+            return None, "unknown species"
+        d = i(proposed.get("dbh_cm"))
+        if d is not None and not 1 <= d <= 300:
+            return None, "trunk size out of range"
+        a, st = i(proposed.get("address")), s(proposed.get("street"))
+        if not a or not st:
+            return None, "address incomplete"
+        found = geocode(a, st)
+        gc = proposed.get("genus_counts")
+        clean_prop.update(
+            dbh_cm=d, address=a, street=st.upper(),
+            # Checked here rather than trusted: the label, and the ward for the new row.
+            found=found["label"] if found else None,
+            ward=(found or {}).get("ward") or (str(i(tree.get("ward"))).zfill(2) if i(tree.get("ward")) else None),
+            genus_counts=({str(k)[:40]: int(v) for k, v in list(gc.items())[:100] if isinstance(v, int) and 0 <= v < 10000}
+                          if isinstance(gc, dict) else None),
+        )
 
     m = body.get("measured") or None
     return {
@@ -238,7 +261,7 @@ def validate(body: dict) -> tuple[dict | None, str | None]:
 
 KIND_LABEL = {
     "remove": "No tree here", "species": "Wrong species", "dbh": "Wrong trunk size",
-    "address": "Wrong address", "other": "Something else",
+    "address": "Wrong address", "other": "Something else", "add": "Missing tree",
 }
 REASON_LABEL = {"stump": "cut down (stump or empty spot)", "never": "never a tree here", "unsure": "not sure why"}
 
@@ -254,6 +277,7 @@ def city_says(r: dict) -> str:
         "species": f"{t['common']} ({t['botanical']})",
         "dbh": f"{t['dbh']} cm" if t["dbh"] else "not recorded",
         "address": where(t),
+        "add": "no tree recorded at this spot",
     }.get(r["kind"], "")
 
 
@@ -275,6 +299,14 @@ def reader_says(r: dict) -> str:
         moves = (f"; dot moves {metres((r['tree']['lat'], r['tree']['lon']), (pl['lat'], pl['lon'])):.0f} m"
                  if pl else "; not in the City's address list, place it by hand")
         return f"{p['address']} {p['street']}{moves}"
+    if k == "add":
+        tx = taxa_index().get(p.get("botanical") or "", {})
+        name = "species unknown" if p.get("unsure") else f"{tx.get('common') or p['botanical']} ({p['botanical']})"
+        m = r.get("measured") or {}
+        size = (f"{p['dbh_cm']} cm" + (f" (measured {m.get('value')} {m.get('unit')} {m.get('how')})" if m.get("value") else "")
+                if p.get("dbh_cm") else "trunk not measured")
+        found = "" if p.get("found") else " (not in the City's address list)"
+        return f"{name}, {size}, in front of {p['address']} {p['street']}{found}"
     return r.get("note") or ""
 
 
@@ -289,6 +321,11 @@ def links(t: dict, base: str) -> dict:
 
 def subject(r: dict) -> str:
     t = r["tree"]
+    if r["kind"] == "add":
+        p = r["proposed"]
+        tx = taxa_index().get(p.get("botanical") or "", {})
+        name = "species unknown" if p.get("unsure") else (tx.get("common") or p["botanical"])
+        return f"Tree report: missing tree at {where(p).title()} ({name})"
     head = f"Tree report: {KIND_LABEL[r['kind']].lower()} at {where(t).title()}"
     if r["kind"] in ("species", "dbh", "address"):
         # Common names only; the botanical ones and the measurement are in the body.
@@ -298,15 +335,23 @@ def subject(r: dict) -> str:
     return head
 
 
+def tree_rows(r: dict, sep: str) -> list[tuple[str, str]]:
+    """Which tree: the City's record, or for an addition the spot the reader tapped."""
+    t = r["tree"]
+    between = f" (between {' and '.join(t['cross'])})" if t["cross"] else ""
+    if r["kind"] == "add":
+        return [("Spot", f"{t['lat']:.6f}, {t['lon']:.6f}"),
+                ("Nearest tree's address", where(t) + between)]
+    return [("Tree", f"{t['common'] or t['botanical']}{sep}{t['dbh'] or '?'} cm{sep}STRUCTID {t['struct_id']}"),
+            ("Where", where(t) + between)]
+
+
 def email_html(rid: str, r: dict, review_url: str, others: int) -> str:
     """The message the reviewer gets. Production sends this same HTML through Resend."""
     t, e = r["tree"], html.escape
     lk = links(t, PUBLIC_MAP)
     rows = [("The City says", city_says(r)), ("Reader says", reader_says(r))] if r["kind"] != "other" else []
-    rows += [
-        ("Tree", f"{t['common'] or t['botanical']} · {t['dbh'] or '?'} cm · STRUCTID {t['struct_id']}"),
-        ("Where", where(t) + (f" (between {' and '.join(t['cross'])})" if t["cross"] else "")),
-    ]
+    rows += tree_rows(r, " · ")
     if r["note"] and r["kind"] != "other":
         rows.append(("Their note", r["note"]))
     if t.get("corrected"):
@@ -368,15 +413,13 @@ def review_page(rid: str, r: dict, token: str, flash: str = "") -> bytes:
         ("The City says", city_says(r)) if r["kind"] != "other" else None,
         ("Reader says", reader_says(r)),
         ("Their note", r["note"]) if r["note"] and r["kind"] != "other" else None,
-        ("Tree", f"{t['common'] or t['botanical']} ({t['botanical']}), {t['dbh'] or '?'} cm"),
-        ("Address", where(t) + (f", between {' and '.join(t['cross'])}" if t["cross"] else "")),
-        ("STRUCTID", t["struct_id"]),
+        *tree_rows(r, ", "),
         ("Already corrected", ", ".join(t["corrected"])) if t.get("corrected") else None,
         ("Reply to", r["email"] or "(none)"),
         ("Received", r["received"][:16].replace("T", " ")),
     ]
     rows = "".join(f"<tr><th>{e(k)}</th><td>{e(str(v))}</td></tr>" for k, v in (f for f in facts if f))
-    others = [k for k, o in load().items() if k != rid and o["tree"]["struct_id"] == t["struct_id"]]
+    others = [k for k, o in load().items() if k != rid and t["struct_id"] and o["tree"]["struct_id"] == t["struct_id"]]
     other_html = ("<p class='warn'>Other reports on this tree: " + ", ".join(
         f'<a href="/review/{k}?t={sign(k)}">{k}</a>' for k in others) + "</p>") if others else ""
 
@@ -390,33 +433,42 @@ def review_page(rid: str, r: dict, token: str, flash: str = "") -> bytes:
     else:
         # The reviewer can correct the correction before it goes in: a reader's species
         # "unsure", or an "other" that is really an address fix, gets recast here.
-        suggested = r["kind"] if r["kind"] in APPLY_KINDS and not r["proposed"].get("unsure") else ""
+        is_add = r["kind"] == "add"
+        suggested = "add" if is_add else r["kind"] if r["kind"] in APPLY_KINDS and not r["proposed"].get("unsure") else ""
         p = r["proposed"]
         taxa = sorted(taxa_index().values(), key=lambda x: -x["count"])
         opts = "".join(
             f'<option value="{e(x["botanical"])}"{" selected" if x["botanical"] == p.get("botanical") else ""}>'
             f'{e((x["common"] or x["botanical"]) + " (" + x["botanical"] + ")")}</option>'
             for x in taxa if x["genus"])
-        pl = p.get("place")
-        placed_text = (f"Found {pl['label']}" + (", keeping the tree's offset from its old address." if pl.get("offset") else ", on its address point.")
-                       if pl else "Not found in the City's address list. Look up a corrected address, or drag the blue dot into place.")
+        if is_add:
+            # An addition goes where the reader tapped; the address only labels it.
+            pl = {"lat": t["lat"], "lon": t["lon"], "ward": p.get("ward")}
+            placed_text = ((f"{p['found']} is in the City's address list." if p.get("found")
+                            else "That address isn't in the City's list; check it.")
+                           + " The blue dot is where the reader tapped: drag it onto the trunk if it's off.")
+        else:
+            pl = p.get("place")
+            placed_text = (f"Found {pl['label']}" + (", keeping the tree's offset from its old address." if pl.get("offset") else ", on its address point.")
+                           if pl else "Not found in the City's address list. Look up a corrected address, or drag the blue dot into place.")
+        choices = ([("", "Don't change the map (close as handled)"), ("add", "Add the tree")] if is_add else
+                   [("", "Don't change the map (close as handled)"), ("remove", "Remove the tree"),
+                    ("species", "Change the species"), ("dbh", "Change the trunk size"),
+                    ("address", "Change the address")])
         kind_opts = "".join(
-            f'<option value="{k}"{" selected" if k == suggested else ""}>{e(lbl)}</option>'
-            for k, lbl in [("", "Don't change the map (close as handled)"), ("remove", "Remove the tree"),
-                           ("species", "Change the species"), ("dbh", "Change the trunk size"),
-                           ("address", "Change the address")])
+            f'<option value="{k}"{" selected" if k == suggested else ""}>{e(lbl)}</option>' for k, lbl in choices)
         form = f"""
 <form method="post" action="/review/{rid}">
 <input type="hidden" name="t" value="{token}">
 <label for="kind">Apply as</label><select name="kind" id="kind">{kind_opts}</select>
-<div data-for="species"><label for="botanical">Species</label><select name="botanical" id="botanical"><option value="">Choose…</option>{opts}</select></div>
-<div data-for="dbh"><label for="dbh">Trunk diameter, cm</label><input name="dbh_cm" id="dbh" type="number" min="1" max="300" value="{p.get('dbh_cm') or ''}"></div>
-<div data-for="address"><label for="addr">Street number and street</label>
+<div data-for="species add"><label for="botanical">Species</label><select name="botanical" id="botanical"><option value="">Choose…</option>{opts}</select></div>
+<div data-for="dbh add"><label for="dbh">Trunk diameter, cm{" (optional)" if is_add else ""}</label><input name="dbh_cm" id="dbh" type="number" min="1" max="300" value="{p.get('dbh_cm') or ''}"></div>
+<div data-for="address add"><label for="addr">Street number and street</label>
 <div style="display:flex;gap:6px"><input name="address" id="addr" style="flex:0 0 90px" value="{p.get('address') or t['address'] or ''}"><input name="street" id="street" value="{e(p.get('street') or t['street'] or '')}">
 <button type="button" id="lookup" style="flex:none">Look up</button></div>
 <div id="placed" class="muted" style="margin:6px 0">{e(placed_text)}</div>
 <div id="pmap" style="height:320px;border-radius:8px;border:1px solid var(--line)"></div>
-<div class="muted" style="font-size:12px;margin-top:4px">Grey: where the City has it. Blue: where it will go. Drag the blue dot onto the tree if you can see it.</div>
+<div class="muted" style="font-size:12px;margin-top:4px">{"Blue: where the new tree will go. Drag it onto the trunk if you can see it." if is_add else "Grey: where the City has it. Blue: where it will go. Drag the blue dot onto the tree if you can see it."}</div>
 <input type="hidden" name="new_lat" id="new_lat" value="{pl['lat'] if pl else ''}"><input type="hidden" name="new_lon" id="new_lon" value="{pl['lon'] if pl else ''}">
 <input type="hidden" name="new_ward" id="new_ward" value="{e((pl or {}).get('ward') or '')}"></div>
 <label for="note">Public note <span class="muted">(goes in the repo; optional)</span></label>
@@ -429,6 +481,7 @@ def review_page(rid: str, r: dict, token: str, flash: str = "") -> bytes:
 <script>
 const $=(id)=>document.getElementById(id);
 const city=[{t['lat']},{t['lon']}];
+const isAdd={json.dumps(is_add)};
 let pmap=null,marker=null;
 function setPoint(ll,pan){{$('new_lat').value=ll[0].toFixed(7);$('new_lon').value=ll[1].toFixed(7);
   if(!marker){{marker=L.marker(ll,{{draggable:true,icon:L.divIcon({{className:'',html:'<div style="width:16px;height:16px;border-radius:50%;background:#2a78d6;border:2px solid #fff;box-shadow:0 0 0 1px #2a78d6"></div>',iconSize:[16,16],iconAnchor:[8,8]}})}}).addTo(pmap);
@@ -439,16 +492,18 @@ function initMap(){{if(pmap)return;pmap=L.map('pmap',{{maxZoom:21}});
   const sat=L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{{z}}/{{y}}/{{x}}',{{maxZoom:21,maxNativeZoom:19,attribution:'Esri World Imagery'}}).addTo(pmap);
   const streets=L.tileLayer('https://{{s}}.tile.openstreetmap.org/{{z}}/{{x}}/{{y}}.png',{{maxZoom:21,maxNativeZoom:19,attribution:'&copy; OpenStreetMap'}});
   L.control.layers({{'Satellite':sat,'Streets':streets}}).addTo(pmap);
-  L.circleMarker(city,{{radius:7,color:'#fff',weight:2,fillColor:'#898781',fillOpacity:1}}).addTo(pmap).bindTooltip('The City has it here');
+  if(!isAdd)L.circleMarker(city,{{radius:7,color:'#fff',weight:2,fillColor:'#898781',fillOpacity:1}}).addTo(pmap).bindTooltip('The City has it here');
   pmap.setView(city,19);
   if($('new_lat').value)setPoint([+$('new_lat').value,+$('new_lon').value],true);}}
 $('lookup').onclick=async()=>{{$('placed').textContent='Looking up…';
   const q=new URLSearchParams({{address:$('addr').value,street:$('street').value,lat:city[0],lon:city[1],from_address:{json.dumps(t['address'] or '')},from_street:{json.dumps(t['street'] or '')}}});
   const r=await (await fetch('/api/place?'+q)).json();
-  if(!r.found){{$('placed').textContent="Not in the City's address list. Drag the blue dot into place.";if(!marker)setPoint(city,false);return}}
-  $('new_ward').value=r.ward||'';setPoint([r.lat,r.lon],true);$('placed').textContent='Found '+r.label+(r.offset?", keeping the tree's offset from its old address.":', on its address point.');}};
-const k=$('kind');const sync=()=>{{document.querySelectorAll('[data-for]').forEach(d=>d.hidden=d.dataset.for!==k.value);
-  if(k.value==='address'){{initMap();setTimeout(()=>pmap.invalidateSize(),0);if(!marker)setPoint(city,false)}}}};k.onchange=sync;sync();
+  if(!r.found){{$('placed').textContent=isAdd?"Not in the City's address list.":"Not in the City's address list. Drag the blue dot into place.";if(!marker)setPoint(city,false);return}}
+  $('new_ward').value=r.ward||'';
+  if(isAdd){{$('placed').textContent='Found '+r.label+'. The tree stays where the blue dot is.';return}}
+  setPoint([r.lat,r.lon],true);$('placed').textContent='Found '+r.label+(r.offset?", keeping the tree's offset from its old address.":', on its address point.');}};
+const k=$('kind');const sync=()=>{{document.querySelectorAll('[data-for]').forEach(d=>d.hidden=!d.dataset.for.split(' ').includes(k.value));
+  if(k.value==='address'||k.value==='add'){{initMap();setTimeout(()=>pmap.invalidateSize(),0);if(!marker)setPoint(city,false)}}}};k.onchange=sync;sync();
 </script>"""
 
     return page(f"Review {rid}", f"""
@@ -482,7 +537,7 @@ def approve(rid: str, r: dict, form: dict) -> tuple[str | None, str | None]:
     if not kind:
         r.update(status="closed", decision_note=note or None)
         return None, None
-    t = r["tree"]
+    t, p = r["tree"], r["proposed"]
     row = {c: "" for c in SEED_COLS}
     row.update(
         correction_id=f"c{rid}", struct_id=t["struct_id"], kind=kind,
@@ -491,21 +546,29 @@ def approve(rid: str, r: dict, form: dict) -> tuple[str | None, str | None]:
         snap_address=t["address"] if t["address"] is not None else "",
         snap_street=t["street"] or "", snap_lon=t["lon"], snap_lat=t["lat"], note=note,
     )
-    if kind == "species":
+    if kind == "add":
+        # A new tree has no City record to snapshot; what is kept instead is the address
+        # the reader gave, and how many trees of the genus the City had there.
+        row.update(struct_id=f"R-{rid}", snap_botanical="", snap_dbh_cm="",
+                   snap_address=p.get("address") or "", snap_street=p.get("street") or "")
+
+    if kind in ("species", "add"):
         if form.get("botanical") not in taxa_index():
             return None, "Choose a species from the list."
-        if form["botanical"] == t["botanical"]:
+        if kind == "species" and form["botanical"] == t["botanical"]:
             return None, "That's the species the City already has."
         row["new_botanical"] = form["botanical"]
-    elif kind == "dbh":
-        try:
-            d = int(form.get("dbh_cm", ""))
-        except ValueError:
-            return None, "Enter a trunk diameter."
-        if not 1 <= d <= 300:
-            return None, "Trunk diameter must be 1 to 300 cm."
-        row["new_dbh_cm"] = d
-    elif kind == "address":
+    if kind in ("dbh", "add"):
+        raw = (form.get("dbh_cm") or "").strip()
+        if raw or kind == "dbh":
+            try:
+                d = int(raw)
+            except ValueError:
+                return None, "Enter a trunk diameter."
+            if not 1 <= d <= 300:
+                return None, "Trunk diameter must be 1 to 300 cm."
+            row["new_dbh_cm"] = d
+    if kind in ("address", "add"):
         try:
             a = int(form.get("address", ""))
         except ValueError:
@@ -522,15 +585,35 @@ def approve(rid: str, r: dict, form: dict) -> tuple[str | None, str | None]:
         ward = (form.get("new_ward") or "").strip()
         row.update(new_address=a, new_street=st, new_lat=round(nlat, 7), new_lon=round(nlon, 7),
                    new_ward=ward.zfill(2) if ward.isdigit() else "")
+    if kind == "add":
+        counts = p.get("genus_counts")
+        genus = taxa_index()[row["new_botanical"]].get("genus")
+        same_place = (row["new_address"], row["new_street"]) == (p.get("address"), p.get("street"))
+        # -1: unknown (no counts, or the address was changed in review), never auto-retired.
+        row["snap_count"] = counts.get(genus, 0) if counts is not None and same_place else -1
 
-    new_file = not SEED.exists() or SEED.stat().st_size == 0
-    with SEED.open("a", newline="") as fh:
-        w = csv.DictWriter(fh, SEED_COLS)
-        if new_file:
-            w.writeheader()
-        w.writerow(row)
+    append_seed_row(row)
     r.update(status="approved", correction_id=row["correction_id"], decision_note=note or None)
     return row["correction_id"], None
+
+
+def append_seed_row(row: dict) -> None:
+    """Append in the order of the file's own header, so a column added later can't shift
+    values into the wrong place; plain \n endings, like the Worker's commits."""
+    text = SEED.read_text() if SEED.exists() else ""
+    header = next(csv.reader([text.splitlines()[0]])) if text.strip() else SEED_COLS
+    missing = [k for k, v in row.items() if v not in ("", None) and k not in header]
+    if missing:
+        raise ValueError(f"tree_corrections.csv has no column for {missing}")
+    buf = io.StringIO()
+    w = csv.DictWriter(buf, header, lineterminator="\n", extrasaction="ignore")
+    if not text.strip():
+        w.writeheader()
+    w.writerow(row)
+    with SEED.open("a", newline="") as fh:
+        if text and not text.endswith("\n"):
+            fh.write("\n")
+        fh.write(buf.getvalue())
 
 
 def run_rebuild() -> None:
@@ -686,7 +769,7 @@ class Handler(SimpleHTTPRequestHandler):
                 reports[rid] = clean
                 save(reports)
                 others = sum(1 for k, o in reports.items()
-                             if k != rid and o["status"] == "pending" and o["tree"]["struct_id"] == clean["tree"]["struct_id"])
+                             if k != rid and o["status"] == "pending" and clean["tree"]["struct_id"] and o["tree"]["struct_id"] == clean["tree"]["struct_id"])
             review_url = f"http://localhost:{PORT}/review/{rid}?t={sign(rid)}"
             (STATE / "outbox").mkdir(parents=True, exist_ok=True)
             msg = {"id": f"{int(now)}-{rid}", "to": REVIEWER, "subject": subject(clean),

@@ -11,17 +11,17 @@
  * corrections/dev_server.py implements the same routes for localhost.
  */
 
-const KINDS = new Set(["remove", "species", "dbh", "address", "other"]);
+const KINDS = new Set(["remove", "species", "dbh", "address", "other", "add"]);
 const APPLY_KINDS = ["remove", "species", "dbh", "address"];
 const SEED_COLS = [
   "correction_id", "struct_id", "kind", "approved_at",
   "snap_botanical", "snap_dbh_cm", "snap_address", "snap_street", "snap_lon", "snap_lat",
   "new_botanical", "new_dbh_cm", "new_address", "new_street", "new_lon", "new_lat", "new_ward",
-  "note",
+  "snap_count", "note",
 ];
 const KIND_LABEL = {
   remove: "No tree here", species: "Wrong species", dbh: "Wrong trunk size",
-  address: "Wrong address", other: "Something else",
+  address: "Wrong address", other: "Something else", add: "Missing tree",
 };
 const REASON_LABEL = { stump: "cut down (stump or empty spot)", never: "never a tree here", unsure: "not sure why" };
 const PER_IP_HOUR = 20;
@@ -169,14 +169,15 @@ async function getPlace(url) {
 
 /* ------------------------------------------------------------------ receiving ------- */
 
-const STRUCT_RE = /^[A-Z]{0,3}\d{1,8}$/;
+// A City STRUCTID, or R-<report id> for a tree a reader added.
+const STRUCT_RE = /^(?:[A-Z]{0,3}\d{1,8}|R-[0-9a-f]{8})$/;
 const EMAIL_RE = /^[^@\s]{1,100}@[^@\s]{1,100}\.[^@\s]{2,}$/;
 
 async function validate(body, env) {
   const kind = body.kind, tree = body.tree || {}, proposed = body.proposed || {};
   if (!KINDS.has(kind)) return [null, "unknown problem type"];
   const sid = String(tree.struct_id || "");
-  if (!STRUCT_RE.test(sid)) return [null, "missing tree id"];
+  if (kind !== "add" && !STRUCT_RE.test(sid)) return [null, "missing tree id"];
   const lat = Number(tree.lat), lon = Number(tree.lon);
   if (!(lat > 43.5 && lat < 43.9 && lon > -79.7 && lon < -79.1)) return [null, "position outside Toronto"];
   const email = String(body.email || "").trim().slice(0, 200) || null;
@@ -204,6 +205,26 @@ async function validate(body, env) {
     Object.assign(prop, { address: a, street: st.toUpperCase() });
     // Placed here, not trusted from the browser: the form's lookup is only a preview.
     prop.place = await place(a, st, [lat, lon], i(tree.address), s(tree.street));
+  } else if (kind === "add") {
+    prop.unsure = !!proposed.unsure;
+    prop.botanical = prop.unsure ? null : s(proposed.botanical);
+    if (!prop.unsure && !(await taxa(env)).has(prop.botanical)) return [null, "unknown species"];
+    const d = i(proposed.dbh_cm);
+    if (d !== null && (d < 1 || d > 300)) return [null, "trunk size out of range"];
+    const a = i(proposed.address), st = s(proposed.street);
+    if (!a || !st) return [null, "address incomplete"];
+    // Checked here rather than trusted: the label, and the ward for the new row.
+    const found = await geocode(a, st);
+    const gc = proposed.genus_counts;
+    Object.assign(prop, {
+      dbh_cm: d, address: a, street: st.toUpperCase(),
+      found: found ? found.label : null,
+      ward: (found && found.ward) || (i(tree.ward) ? String(i(tree.ward)).padStart(2, "0") : null),
+      genus_counts: gc && typeof gc === "object" && !Array.isArray(gc)
+        ? Object.fromEntries(Object.entries(gc).slice(0, 100)
+            .filter(([, v]) => Number.isInteger(v) && v >= 0 && v < 10000).map(([k, v]) => [String(k).slice(0, 40), v]))
+        : null,
+    });
   }
 
   const m = body.measured && typeof body.measured === "object" ? body.measured : null;
@@ -263,7 +284,8 @@ async function postReport(req, env, url) {
     env.DB.prepare("INSERT INTO reports (id, received, kind, struct_id, body, email) VALUES (?, ?, ?, ?, ?, ?)")
       .bind(id, received, clean.kind, clean.tree.struct_id, JSON.stringify(clean), email),
   ]);
-  const others = (await env.DB.prepare("SELECT count(*) AS n FROM reports WHERE struct_id = ? AND status = 'pending' AND id != ?")
+  // Additions have no tree id, so there is nothing to call a duplicate.
+  const others = !clean.tree.struct_id ? 0 : (await env.DB.prepare("SELECT count(*) AS n FROM reports WHERE struct_id = ? AND status = 'pending' AND id != ?")
     .bind(clean.tree.struct_id, id).first()).n;
 
   const r = { ...clean, email };
@@ -298,6 +320,7 @@ function citySays(r) {
     species: `${t.common} (${t.botanical})`,
     dbh: t.dbh ? `${t.dbh} cm` : "not recorded",
     address: where(t),
+    add: "no tree recorded at this spot",
   }[r.kind] || "";
 }
 
@@ -319,6 +342,13 @@ function readerSays(r, tx) {
       ? `; dot moves ${Math.round(metres([r.tree.lat, r.tree.lon], [pl.lat, pl.lon]))} m`
       : "; not in the City's address list, place it by hand");
   }
+  if (r.kind === "add") {
+    const t = tx && p.botanical && tx.get(p.botanical);
+    const name = p.unsure ? "species unknown" : `${(t && t.common) || p.botanical} (${p.botanical})`;
+    const m = r.measured || {};
+    const size = p.dbh_cm ? `${p.dbh_cm} cm` + (m.value ? ` (measured ${m.value} ${m.unit} ${m.how})` : "") : "trunk not measured";
+    return `${name}, ${size}, in front of ${p.address} ${p.street}` + (p.found ? "" : " (not in the City's address list)");
+  }
   return r.note || "";
 }
 
@@ -334,6 +364,10 @@ function links(t, base) {
 function subject(r, tx) {
   const t = r.tree;
   const title = (s) => s.toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase());
+  if (r.kind === "add") {
+    const p = r.proposed, x = p.botanical && tx.get(p.botanical);
+    return `Tree report: missing tree at ${title(where(p))} (${p.unsure ? "species unknown" : (x && x.common) || p.botanical})`.slice(0, 200);
+  }
   let head = `Tree report: ${KIND_LABEL[r.kind].toLowerCase()} at ${title(where(t))}`;
   if (["species", "dbh", "address"].includes(r.kind)) {
     // Common names only; the botanical ones and the measurement are in the body.
@@ -343,14 +377,19 @@ function subject(r, tx) {
   return head.slice(0, 200);
 }
 
+/* Which tree: the City's record, or for an addition the spot the reader tapped. */
+function treeRows(r, sep) {
+  const t = r.tree;
+  const between = t.cross.length ? ` (between ${t.cross.join(" and ")})` : "";
+  if (r.kind === "add") return [["Spot", `${t.lat.toFixed(6)}, ${t.lon.toFixed(6)}`], ["Nearest tree's address", where(t) + between]];
+  return [["Tree", `${t.common || t.botanical}${sep}${t.dbh || "?"} cm${sep}STRUCTID ${t.struct_id}`], ["Where", where(t) + between]];
+}
+
 async function emailHtml(env, id, r, reviewUrl, others) {
   const t = r.tree, tx = await taxa(env);
   const lk = links(t, env.PUBLIC_MAP);
   const rows = r.kind !== "other" ? [["The City says", citySays(r)], ["Reader says", readerSays(r, tx)]] : [];
-  rows.push(
-    ["Tree", `${t.common || t.botanical} · ${t.dbh || "?"} cm · STRUCTID ${t.struct_id}`],
-    ["Where", where(t) + (t.cross.length ? ` (between ${t.cross.join(" and ")})` : "")],
-  );
+  rows.push(...treeRows(r, " · "));
   if (r.note && r.kind !== "other") rows.push(["Their note", r.note]);
   if (t.corrected.length) rows.push(["Already corrected", t.corrected.join(", ") + " (the City-says values above are the City's)"]);
   rows.push(["Reply to", r.email || "(no email given)"]);
@@ -416,16 +455,14 @@ async function reviewBody(env, id, r, token, flash) {
     r.kind !== "other" && ["The City says", citySays(r)],
     ["Reader says", readerSays(r, tx)],
     r.note && r.kind !== "other" && ["Their note", r.note],
-    ["Tree", `${t.common || t.botanical} (${t.botanical}), ${t.dbh || "?"} cm`],
-    ["Address", where(t) + (t.cross.length ? `, between ${t.cross.join(" and ")}` : "")],
-    ["STRUCTID", t.struct_id],
+    ...treeRows(r, ", "),
     t.corrected.length && ["Already corrected", t.corrected.join(", ")],
     ["Reply to", r.email || "(none)"],
     ["Received", row.received.slice(0, 16).replace("T", " ") + " UTC"],
   ].filter(Boolean);
   const rows = facts.map(([k, v]) => `<tr><th>${esc(k)}</th><td>${esc(v)}</td></tr>`).join("");
 
-  const others = (await env.DB.prepare("SELECT id, status FROM reports WHERE struct_id = ? AND id != ? ORDER BY received")
+  const others = !t.struct_id ? [] : (await env.DB.prepare("SELECT id, status FROM reports WHERE struct_id = ? AND id != ? ORDER BY received")
     .bind(t.struct_id, id).all()).results;
   const otherLinks = await Promise.all(others.map(async (o) => `<a href="/review/${o.id}?t=${await sign(env, o.id)}">${o.id}</a> (${o.status})`));
   const otherHtml = others.length ? `<p class="warn">Other reports on this tree: ${otherLinks.join(", ")}</p>` : "";
@@ -440,28 +477,36 @@ The map rebuilds on its own in about five minutes: <a href="https://github.com/$
     }
   } else {
     const p = r.proposed;
-    const suggested = APPLY_KINDS.includes(r.kind) && !p.unsure ? r.kind : "";
+    const isAdd = r.kind === "add";
+    const suggested = isAdd ? "add" : APPLY_KINDS.includes(r.kind) && !p.unsure ? r.kind : "";
     const opts = [...tx.values()].filter((x) => x.genus).sort((a, b) => b.count - a.count).map((x) =>
       `<option value="${esc(x.botanical)}"${x.botanical === p.botanical ? " selected" : ""}>${esc((x.common || x.botanical) + " (" + x.botanical + ")")}</option>`).join("");
-    const kindOpts = [["", "Don't change the map (close as handled)"], ["remove", "Remove the tree"], ["species", "Change the species"],
-      ["dbh", "Change the trunk size"], ["address", "Change the address"]]
+    const choices = isAdd
+      ? [["", "Don't change the map (close as handled)"], ["add", "Add the tree"]]
+      : [["", "Don't change the map (close as handled)"], ["remove", "Remove the tree"], ["species", "Change the species"],
+        ["dbh", "Change the trunk size"], ["address", "Change the address"]];
+    const kindOpts = choices
       .map(([k, l]) => `<option value="${k}"${k === suggested ? " selected" : ""}>${esc(l)}</option>`).join("");
-    const pl = p.place;
-    const placed = pl
-      ? `Found ${pl.label}` + (pl.offset ? ", keeping the tree's offset from its old address." : ", on its address point.")
-      : "Not found in the City's address list. Look up a corrected address, or drag the blue dot into place.";
+    // An addition goes where the reader tapped; the address only labels it.
+    const pl = isAdd ? { lat: t.lat, lon: t.lon, ward: p.ward } : p.place;
+    const placed = isAdd
+      ? (p.found ? `${p.found} is in the City's address list.` : "That address isn't in the City's list; check it.") +
+        " The blue dot is where the reader tapped: drag it onto the trunk if it's off."
+      : pl
+        ? `Found ${pl.label}` + (pl.offset ? ", keeping the tree's offset from its old address." : ", on its address point.")
+        : "Not found in the City's address list. Look up a corrected address, or drag the blue dot into place.";
     form = `
 <form method="post" action="/review/${id}">
 <input type="hidden" name="t" value="${esc(token)}">
 <label for="kind">Apply as</label><select name="kind" id="kind">${kindOpts}</select>
-<div data-for="species"><label for="botanical">Species</label><select name="botanical" id="botanical"><option value="">Choose…</option>${opts}</select></div>
-<div data-for="dbh"><label for="dbh">Trunk diameter, cm</label><input name="dbh_cm" id="dbh" type="number" min="1" max="300" value="${esc(p.dbh_cm || "")}"></div>
-<div data-for="address"><label for="addr">Street number and street</label>
+<div data-for="species add"><label for="botanical">Species</label><select name="botanical" id="botanical"><option value="">Choose…</option>${opts}</select></div>
+<div data-for="dbh add"><label for="dbh">Trunk diameter, cm${isAdd ? " (optional)" : ""}</label><input name="dbh_cm" id="dbh" type="number" min="1" max="300" value="${esc(p.dbh_cm || "")}"></div>
+<div data-for="address add"><label for="addr">Street number and street</label>
 <div style="display:flex;gap:6px"><input name="address" id="addr" style="flex:0 0 90px" value="${esc(p.address || t.address || "")}"><input name="street" id="street" value="${esc(p.street || t.street || "")}">
 <button type="button" id="lookup" style="flex:none">Look up</button></div>
 <div id="placed" class="muted" style="margin:6px 0">${esc(placed)}</div>
 <div id="pmap" style="height:320px;border-radius:8px;border:1px solid var(--line)"></div>
-<div class="muted" style="font-size:12px;margin-top:4px">Grey: where the City has it. Blue: where it will go. Drag the blue dot onto the tree if you can see it.</div>
+<div class="muted" style="font-size:12px;margin-top:4px">${isAdd ? "Blue: where the new tree will go. Drag it onto the trunk if you can see it." : "Grey: where the City has it. Blue: where it will go. Drag the blue dot onto the tree if you can see it."}</div>
 <input type="hidden" name="new_lat" id="new_lat" value="${pl ? pl.lat : ""}"><input type="hidden" name="new_lon" id="new_lon" value="${pl ? pl.lon : ""}">
 <input type="hidden" name="new_ward" id="new_ward" value="${esc((pl && pl.ward) || "")}"></div>
 <label for="note">Public note <span class="muted">(goes in the repo; optional)</span></label>
@@ -474,6 +519,7 @@ The map rebuilds on its own in about five minutes: <a href="https://github.com/$
 <script>
 const $=(id)=>document.getElementById(id);
 const city=[${t.lat},${t.lon}];
+const isAdd=${isAdd};
 const from=${JSON.stringify({ address: t.address || "", street: t.street || "" }).replace(/</g, "\\u003c")};
 let pmap=null,marker=null;
 function setPoint(ll,pan){$('new_lat').value=ll[0].toFixed(7);$('new_lon').value=ll[1].toFixed(7);
@@ -485,16 +531,18 @@ function initMap(){if(pmap)return;pmap=L.map('pmap',{maxZoom:21});
   const sat=L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',{maxZoom:21,maxNativeZoom:19,attribution:'Esri World Imagery'}).addTo(pmap);
   const streets=L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:21,maxNativeZoom:19,attribution:'&copy; OpenStreetMap'});
   L.control.layers({'Satellite':sat,'Streets':streets}).addTo(pmap);
-  L.circleMarker(city,{radius:7,color:'#fff',weight:2,fillColor:'#898781',fillOpacity:1}).addTo(pmap).bindTooltip('The City has it here');
+  if(!isAdd)L.circleMarker(city,{radius:7,color:'#fff',weight:2,fillColor:'#898781',fillOpacity:1}).addTo(pmap).bindTooltip('The City has it here');
   pmap.setView(city,19);
   if($('new_lat').value)setPoint([+$('new_lat').value,+$('new_lon').value],true);}
 $('lookup').onclick=async()=>{$('placed').textContent='Looking up…';
   const q=new URLSearchParams({address:$('addr').value,street:$('street').value,lat:city[0],lon:city[1],from_address:from.address,from_street:from.street});
   const r=await (await fetch('/place?'+q)).json();
-  if(!r.found){$('placed').textContent="Not in the City's address list. Drag the blue dot into place.";if(!marker)setPoint(city,false);return}
-  $('new_ward').value=r.ward||'';setPoint([r.lat,r.lon],true);$('placed').textContent='Found '+r.label+(r.offset?", keeping the tree's offset from its old address.":', on its address point.');};
-const k=$('kind');const sync=()=>{document.querySelectorAll('[data-for]').forEach(d=>d.hidden=d.dataset.for!==k.value);
-  if(k.value==='address'){initMap();setTimeout(()=>pmap.invalidateSize(),0);if(!marker)setPoint(city,false)}};k.onchange=sync;sync();
+  if(!r.found){$('placed').textContent=isAdd?"Not in the City's address list.":"Not in the City's address list. Drag the blue dot into place.";if(!marker)setPoint(city,false);return}
+  $('new_ward').value=r.ward||'';
+  if(isAdd){$('placed').textContent='Found '+r.label+'. The tree stays where the blue dot is.';return}
+  setPoint([r.lat,r.lon],true);$('placed').textContent='Found '+r.label+(r.offset?", keeping the tree's offset from its old address.":', on its address point.');};
+const k=$('kind');const sync=()=>{document.querySelectorAll('[data-for]').forEach(d=>d.hidden=!d.dataset.for.split(' ').includes(k.value));
+  if(k.value==='address'||k.value==='add'){initMap();setTimeout(()=>pmap.invalidateSize(),0);if(!marker)setPoint(city,false)}};k.onchange=sync;sync();
 document.querySelector('form').addEventListener('submit',(e)=>{const b=e.submitter;if(b){setTimeout(()=>{b.disabled=true;b.textContent='Working…'},0)}});
 </script>`;
   }
@@ -541,8 +589,10 @@ async function postReview(id, req, env, url) {
 }
 
 async function correctionRow(env, id, r, form, note) {
-  const t = r.tree, kind = form.kind;
-  if (!APPLY_KINDS.includes(kind)) return [null, "Unknown correction type."];
+  const t = r.tree, p = r.proposed, kind = form.kind;
+  const allowed = r.kind === "add" ? ["add"] : APPLY_KINDS;
+  if (!allowed.includes(kind)) return [null, "Unknown correction type."];
+  const tx = await taxa(env);
   const row = Object.fromEntries(SEED_COLS.map((c) => [c, ""]));
   Object.assign(row, {
     correction_id: "c" + id, struct_id: t.struct_id, kind,
@@ -550,15 +600,26 @@ async function correctionRow(env, id, r, form, note) {
     snap_botanical: t.botanical, snap_dbh_cm: t.dbh || 0, snap_address: t.address ?? "",
     snap_street: t.street || "", snap_lon: t.lon, snap_lat: t.lat, note,
   });
-  if (kind === "species") {
-    if (!(await taxa(env)).has(form.botanical)) return [null, "Choose a species from the list."];
-    if (form.botanical === t.botanical) return [null, "That's the species the City already has."];
+  if (kind === "add") {
+    // A new tree has no City record to snapshot; what is kept instead is the address the
+    // reader gave, and how many trees of the genus the City had there.
+    Object.assign(row, { struct_id: "R-" + id, snap_botanical: "", snap_dbh_cm: "",
+      snap_address: p.address ?? "", snap_street: p.street || "" });
+  }
+  if (kind === "species" || kind === "add") {
+    if (!tx.has(form.botanical)) return [null, "Choose a species from the list."];
+    if (kind === "species" && form.botanical === t.botanical) return [null, "That's the species the City already has."];
     row.new_botanical = form.botanical;
-  } else if (kind === "dbh") {
-    const d = parseInt(form.dbh_cm, 10);
-    if (!(d >= 1 && d <= 300)) return [null, "Trunk diameter must be 1 to 300 cm."];
-    row.new_dbh_cm = d;
-  } else if (kind === "address") {
+  }
+  if (kind === "dbh" || kind === "add") {
+    const raw = String(form.dbh_cm || "").trim();
+    if (raw || kind === "dbh") {
+      const d = parseInt(raw, 10);
+      if (!(d >= 1 && d <= 300)) return [null, "Trunk diameter must be 1 to 300 cm."];
+      row.new_dbh_cm = d;
+    }
+  }
+  if (kind === "address" || kind === "add") {
     const a = parseInt(form.address, 10), st = String(form.street || "").trim().toUpperCase().slice(0, 80);
     if (!(a > 0)) return [null, "Enter a street number."];
     if (!st) return [null, "Enter a street."];
@@ -568,6 +629,12 @@ async function correctionRow(env, id, r, form, note) {
     const ward = String(form.new_ward || "").trim();
     Object.assign(row, { new_address: a, new_street: st, new_lat: +lat.toFixed(7), new_lon: +lon.toFixed(7),
       new_ward: /^\d{1,2}$/.test(ward) ? ward.padStart(2, "0") : "" });
+  }
+  if (kind === "add") {
+    const genus = tx.get(row.new_botanical).genus;
+    const samePlace = row.new_address === p.address && row.new_street === p.street;
+    // -1: unknown (no counts, or the address was changed in review), never auto-retired.
+    row.snap_count = p.genus_counts && samePlace ? (p.genus_counts[genus] || 0) : -1;
   }
   return [row, null];
 }
@@ -595,10 +662,16 @@ async function commitRow(env, row, r) {
     authorization: `Bearer ${env.GITHUB_TOKEN}`, accept: "application/vnd.github+json",
     "x-github-api-version": "2022-11-28", "user-agent": "tree-reports-worker",
   };
-  const line = SEED_COLS.map((c) => csvField(row[c])).join(",") + "\n";
+  // Rows follow the file's own header, so a column added later can't shift values.
+  const lineFor = (header) => {
+    const missing = Object.keys(row).filter((k) => row[k] !== "" && row[k] !== null && !header.includes(k));
+    if (missing.length) throw new Error(`tree_corrections.csv has no column for ${missing.join(", ")}`);
+    return header.map((c) => csvField(row[c])).join(",") + "\n";
+  };
   const what = { remove: "remove", species: `species to ${row.new_botanical}`, dbh: `trunk to ${row.new_dbh_cm} cm`,
-    address: `address to ${row.new_address} ${row.new_street}` }[row.kind];
-  const message = `Correct tree ${row.struct_id}: ${what}\n\nApproved reader report ${row.correction_id.slice(1)} (${KIND_LABEL[r.kind].toLowerCase()}).` +
+    address: `address to ${row.new_address} ${row.new_street}`,
+    add: `add ${row.new_botanical} at ${row.new_address} ${row.new_street}` }[row.kind];
+  const message = `${row.kind === "add" ? "Add tree" : "Correct tree"} ${row.struct_id}: ${what}\n\nApproved reader report ${row.correction_id.slice(1)} (${KIND_LABEL[r.kind].toLowerCase()}).` +
     (row.note ? `\n\n${row.note}` : "");
 
   for (let attempt = 0; attempt < 3; attempt++) {
@@ -608,6 +681,8 @@ async function commitRow(env, row, r) {
     let text = b64decode(file.content);
     if (text.includes(`\n${row.correction_id},`)) return file.sha; // already committed by an earlier attempt
     if (text && !text.endsWith("\n")) text += "\n";
+    const header = text ? text.split("\n")[0].replace(/\r$/, "").split(",") : SEED_COLS;
+    const line = (text ? "" : SEED_COLS.join(",") + "\n") + lineFor(header);
     const put = await fetch(api, {
       method: "PUT", headers: { ...headers, "content-type": "application/json" },
       body: JSON.stringify({ message, content: b64encode(text + line), sha: file.sha, branch: env.GITHUB_BRANCH }),

@@ -1248,6 +1248,7 @@ function indexCorrections() {
 
 function correctionText(c) {
   const month = new Date(c.approved + "T12:00:00").toLocaleDateString("en-CA", { month: "short", year: "numeric" });
+  if (c.kind === "add") return `Added from a reader's report (${month}). It isn't in the City's inventory yet.`;
   const city = c.kind === "species"
     ? ((meta.taxa.find((x) => x.botanical === c.city) || {}).common || c.city)
     : c.kind === "dbh" ? (c.city ? `${c.city} cm` : "no trunk size")
@@ -1303,7 +1304,7 @@ function reportContext(i) {
       tree.common = (meta.taxa.find((x) => x.botanical === c.city) || {}).common || null;
     } else if (c.kind === "dbh") {
       tree.dbh = c.city || 0;
-    } else if (c.kind === "address") {
+    } else if (c.kind === "address" && c.city) {
       // Moved trees snapshot the City's position as well as its address.
       Object.assign(tree, { address: c.city.address, street: c.city.street, lon: c.city.lon, lat: c.city.lat });
     }
@@ -1317,6 +1318,156 @@ function reportContext(i) {
     resize: () => { if (openPopup) openPopup.update(); },
     preview: (to) => previewMove(i, to),
   };
+}
+
+/* ------------------------------------------------------------------ adding a tree ------ */
+
+/* "Add a missing tree": a button on the map puts it in a mode where the next tap opens
+ * the add form at that spot. Too far out to place a trunk, a tap zooms in instead. */
+const ADD_ZOOM = 17;
+const adding = { on: false, banner: null, marker: null, popup: null, tree: null };
+
+function setupAddTree() {
+  if (!window.TREE_REPORT_URL || !window.TreeReport) return;
+  const Ctl = L.Control.extend({
+    options: { position: "topleft" },
+    onAdd() {
+      const bar = L.DomUtil.create("div", "leaflet-bar add-tree-control");
+      const b = L.DomUtil.create("a", "add-tree-btn", bar);
+      b.href = "#";
+      b.setAttribute("role", "button");
+      b.title = "Add a missing tree";
+      b.setAttribute("aria-label", "Add a missing tree");
+      b.innerHTML = '<span aria-hidden="true">+</span><span class="add-tree-label">Add a missing tree</span>';
+      L.DomEvent.disableClickPropagation(bar);
+      L.DomEvent.on(b, "click", (e) => { L.DomEvent.preventDefault(e); adding.on ? stopAdding() : startAdding(); });
+      return bar;
+    },
+  });
+  new Ctl().addTo(map);
+
+  const banner = document.createElement("div");
+  banner.className = "add-banner";
+  banner.hidden = true;
+  banner.innerHTML = '<span class="add-banner-text"></span><button type="button" class="add-banner-cancel">Cancel</button>';
+  banner.querySelector("button").addEventListener("click", stopAdding);
+  el("map-pane").appendChild(banner);
+  adding.banner = banner;
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape" && adding.on) stopAdding(); });
+}
+
+function addingText() {
+  return map.getZoom() >= ADD_ZOOM ? "Tap the map where the trunk is" : "Tap the street to zoom in, then tap the trunk";
+}
+
+function startAdding() {
+  closePopup();
+  adding.on = true;
+  adding.banner.hidden = false;
+  adding.banner.querySelector(".add-banner-text").textContent = addingText();
+  map.getContainer().classList.add("is-adding");
+  document.querySelector(".add-tree-btn").classList.add("is-active");
+}
+
+function stopAdding() {
+  adding.on = false;
+  adding.banner.hidden = true;
+  map.getContainer().classList.remove("is-adding");
+  const btn = document.querySelector(".add-tree-btn");
+  if (btn) btn.classList.remove("is-active");
+  if (adding.popup) { const p = adding.popup; adding.popup = null; map.closePopup(p); }
+  if (adding.marker) { map.removeLayer(adding.marker); adding.marker = null; }
+  adding.tree = null;
+}
+
+function placeAddition(latlng) {
+  if (map.getZoom() < ADD_ZOOM) {
+    map.setView(latlng, 19);
+    adding.banner.querySelector(".add-banner-text").textContent = "Now tap where the trunk is";
+    return;
+  }
+  // A second tap while the form is open moves the spot and keeps what's been typed.
+  if (adding.popup && adding.tree) {
+    adding.tree.lat = +latlng.lat.toFixed(7);
+    adding.tree.lon = +latlng.lng.toFixed(7);
+    adding.marker.setLatLng(latlng);
+    adding.popup.setLatLng(latlng);
+    return;
+  }
+  if (adding.marker) map.removeLayer(adding.marker);
+  adding.banner.hidden = true;
+
+  const colour = cssVar("--series-cleared");
+  adding.marker = L.circleMarker(latlng, {
+    radius: 8, color: colour, weight: 2, dashArray: "3 3", fillColor: colour, fillOpacity: 0.2, interactive: false,
+  }).addTo(map);
+
+  const near = nearestTree(latlng.lat, latlng.lng, 80);
+  const ctx = {
+    tree: {
+      lat: +latlng.lat.toFixed(7),
+      lon: +latlng.lng.toFixed(7),
+      payload: meta.generated_at,
+      botanical: null, common: null, dbh: 0,
+      address: near >= 0 && trees.details ? (trees.addr[near] || null) : null,
+      street: near >= 0 && trees.details ? streetName(trees.street[near]) : null,
+      cross: near >= 0 && trees.details ? [streetName(trees.cross1[near]), streetName(trees.cross2[near])].filter(Boolean) : [],
+      ward: near >= 0 ? (trees.ward[near] || null) : null,
+    },
+    taxa: meta.taxa,
+    streets: meta.streets,
+    genusCounts,
+    structId: () => Promise.resolve(null),
+    resize: () => { if (adding.popup) adding.popup.update(); },
+    preview: () => {},
+  };
+  adding.tree = ctx.tree;
+
+  const wrap = document.createElement("div");
+  const title = document.createElement("div");
+  title.className = "popup-title";
+  title.textContent = "Add a missing tree";
+  const hint = document.createElement("div");
+  hint.className = "popup-description add-hint";
+  hint.textContent = "Not quite the spot? Tap the map again to move it.";
+  wrap.append(title, hint);
+  wrap.appendChild(TreeReport.addForm(ctx, stopAdding));
+
+  adding.popup = L.popup({
+    autoPan: true, maxWidth: 280, closeButton: true, closeOnClick: false,
+    maxHeight: Math.max(240, map.getSize().y - 70),
+  }).setLatLng(latlng).setContent(wrap).openOn(map);
+  adding.popup.once("remove", () => { if (adding.popup) { adding.popup = null; stopAdding(); } });
+}
+
+/* The closest tree within `metres`, for a starting guess at the address. */
+function nearestTree(lat, lon, metres) {
+  const kx = Math.cos(lat * Math.PI / 180);
+  const lim = (metres / 111320) ** 2;
+  let best = -1, bestD = lim;
+  for (let i = 0; i < trees.n; i++) {
+    const dy = trees.lat[i] - lat;
+    if (dy * dy > bestD) continue;
+    const dx = (trees.lon[i] - lon) * kx;
+    const d = dx * dx + dy * dy;
+    if (d < bestD) { bestD = d; best = i; }
+  }
+  return best;
+}
+
+/* Trees per genus the map has at one address. Sent with an addition so the build can tell
+ * when a City refresh has added the same tree; null if the address columns aren't in yet. */
+function genusCounts(address, street) {
+  if (!trees.details || !address || !street) return null;
+  const sid = meta.streets.indexOf(street);
+  const counts = {};
+  if (sid <= 0) return counts;
+  for (let i = 0; i < trees.n; i++) {
+    if (trees.addr[i] !== address || trees.street[i] !== sid) continue;
+    const g = meta.taxa[trees.taxon[i]].genus;
+    if (g) counts[g] = (counts[g] || 0) + 1;
+  }
+  return counts;
 }
 
 /* While an address fix is being entered, show where the dot would move: a dashed line
@@ -1536,6 +1687,7 @@ function setupMapInteraction() {
   const tolerance = () => (map.getZoom() >= CIRCLE_ZOOM ? 12 : 7);
 
   map.on("click", (e) => {
+    if (adding.on) return placeAddition(e.latlng);
     const i = treeLayer.hitTest(map.latLngToLayerPoint(e.latlng), tolerance());
     if (i >= 0) selectTree(i);
     else closePopup();
@@ -1557,6 +1709,8 @@ function setupMapInteraction() {
     rafPending = true;
     requestAnimationFrame(() => {
       rafPending = false;
+      // Placing a new tree: no hover readout, and the crosshair stays.
+      if (adding.on) { tip.hidden = true; map.getContainer().style.cursor = ""; return; }
       // An open popup already names the tree, so the hover readout would just be a
       // second copy of its heading sitting on top of it.
       const i = openPopup ? -1 : treeLayer.hitTest(map.latLngToLayerPoint(e.latlng), tolerance());
@@ -1580,6 +1734,9 @@ function setupMapInteraction() {
 
   map.on("mouseout", () => { tip.hidden = true; });
   map.on("moveend zoomend", writeHash);
+  map.on("zoomend", () => {
+    if (adding.on && !adding.popup) adding.banner.querySelector(".add-banner-text").textContent = addingText();
+  });
 }
 
 /* The draggable mobile sheet lives in panel.js, shared with the analysis pages in
@@ -1724,6 +1881,7 @@ async function main() {
   renderLegend();
   setupPanel();
   setupMapInteraction();
+  setupAddTree();
   applyFilters();
   badge.hidden = true;
 

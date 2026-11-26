@@ -20,20 +20,35 @@
 -- row numbers and get reissued). If a refresh ever reissues STRUCTIDs too, a fingerprint
 -- of the snapshot -- species, address and position within ~3 m -- is tried instead, and
 -- only accepted when it picks out exactly one tree.
+--
+-- Additions ("add") are trees a reader found missing. They get an id of their own,
+-- R-<report id>, and stay until a City refresh adds the same tree itself. The City
+-- places trees at the parcel, 10-25 m from where a reader taps, so that is judged by
+-- address rather than distance: each addition records how many trees of its genus the
+-- City had at that address (snap_count), and one more than that means the City has
+-- caught up -> city_agrees. snap_count = -1 means unknown (the reviewer changed the
+-- address), and the addition is never retired automatically.
+--
+-- A reader-added tree can itself be reported gone; that is a 'remove' aimed at its R- id.
 
 with corrections as (
     select * from {{ ref('tree_corrections') }}
 ),
 
 city as (
-    select struct_id, botanical_display, coalesce(dbh_cm, 0) as dbh_cm, address, street_name,
-           lon, lat
+    select struct_id, botanical_display, genus, coalesce(dbh_cm, 0) as dbh_cm, address,
+           street_name, lon, lat
     from {{ ref('stg_street_trees') }}
+),
+
+-- Corrections to the City's own trees.
+fixes as (
+    select * from corrections where kind != 'add' and struct_id not like 'R-%'
 ),
 
 by_struct as (
     select c.correction_id, t.*, 'struct_id' as matched_by
-    from corrections c
+    from fixes c
     join city t using (struct_id)
 ),
 
@@ -46,7 +61,7 @@ fingerprint as (
            count(*) filter (where t.dbh_cm = c.snap_dbh_cm)
                over (partition by c.correction_id) as n_tight,
            t.dbh_cm = c.snap_dbh_cm as tight
-    from corrections c
+    from fixes c
     join city t
       on t.botanical_display = c.snap_botanical
      and t.street_name = c.snap_street
@@ -64,7 +79,7 @@ matched as (
     where n_loose = 1 or (n_tight = 1 and tight)
 ),
 
-classified as (
+classified_fixes as (
     select
         c.*,
         m.struct_id as city_struct_id,
@@ -100,8 +115,52 @@ classified as (
                      else 'superseded' end
             else 'unknown_kind'
         end as status_raw
-    from corrections c
+    from fixes c
     left join matched m using (correction_id)
+),
+
+additions as (
+    select
+        c.*,
+        c.struct_id as city_struct_id,
+        'reader' as matched_by,
+        case
+            when not exists (select 1 from city k where k.botanical_display = c.new_botanical)
+                then 'unknown_species'
+            when c.snap_count >= 0
+             and (select count(*) from city k
+                  where k.genus = (select any_value(genus) from city g
+                                   where g.botanical_display = c.new_botanical)
+                    and k.street_name = c.snap_street
+                    and k.address is not distinct from c.snap_address) > c.snap_count
+                then 'city_agrees'
+            else 'applied'
+        end as status_raw
+    from corrections c
+    where c.kind = 'add'
+),
+
+-- Only removal is supported on a reader-added tree; anything else wants editing the
+-- addition's own row instead.
+on_reader_trees as (
+    select
+        c.*,
+        c.struct_id as city_struct_id,
+        'reader' as matched_by,
+        case
+            when c.kind != 'remove' then 'unsupported'
+            when exists (select 1 from corrections a where a.kind = 'add' and a.struct_id = c.struct_id)
+                then 'applied'
+            else 'orphaned'
+        end as status_raw
+    from corrections c
+    where c.kind != 'add' and c.struct_id like 'R-%'
+),
+
+classified as (
+    select * from classified_fixes
+    union all by name select * from additions
+    union all by name select * from on_reader_trees
 )
 
 -- Two approved fixes to the same field of the same tree: the later one stands.

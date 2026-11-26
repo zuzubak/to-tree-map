@@ -13,7 +13,7 @@ models:
       - name: kind
         tests:
           - accepted_values:
-              values: ['remove', 'species', 'dbh', 'address']
+              values: ['remove', 'species', 'dbh', 'address', 'add']
       - name: status
         tests:
           - accepted_values:

@@ -6,6 +6,9 @@
 -- for the record. A species fix may only name a taxon already in the inventory, so it
 -- borrows that taxon's parsed fields wholesale instead of re-running the name parser,
 -- and every downstream test (native status, taxon joins) keeps holding.
+--
+-- Trees readers added ("add") are appended with ids of their own: struct_id R-<report id>
+-- and a negative object_id, which no City record can collide with.
 
 with trees as (
     select * from {{ ref('stg_street_trees') }}
@@ -39,8 +42,9 @@ adr as (
            new_street is distinct from city_street as street_changed
     from live where kind = 'address'
 ),
-gone as (select city_struct_id as struct_id from live where kind = 'remove')
+gone as (select city_struct_id as struct_id from live where kind = 'remove'),
 
+corrected as (
 select
     t.* replace (
         coalesce(adr.new_address, t.address) as address,
@@ -68,3 +72,30 @@ left join sp using (struct_id)
 left join dbh using (struct_id)
 left join adr using (struct_id)
 where t.struct_id not in (select struct_id from gone)
+),
+
+added as (
+    select
+        -(row_number() over (order by l.correction_id))::bigint as object_id,
+        l.struct_id,
+        l.new_address as address,
+        l.new_street as street_name,
+        null::varchar as cross_street_1,
+        null::varchar as cross_street_2,
+        lpad(l.new_ward, 2, '0') as ward,
+        l.new_lon as lon,
+        l.new_lat as lat,
+        l.new_dbh_cm as dbh_cm,
+        false as dbh_suspect,
+        null::varchar as botanical_name_raw,
+        x.canonical_name, x.cultivar, x.genus, x.species, x.common_name_raw,
+        x.taxon_key, x.taxon_rank, x.botanical_display
+    from live l
+    join taxa x on x.botanical_display = l.new_botanical
+    where l.kind = 'add'
+      and l.struct_id not in (select struct_id from gone)
+)
+
+select * from corrected
+union all by name
+select * from added

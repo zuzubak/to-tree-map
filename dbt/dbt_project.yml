@@ -61,3 +61,6 @@ seeds:
         new_lon: double
         new_lat: double
         new_ward: varchar
+        # Additions only: trees of the added tree's genus the City had at its address
+        # when it was reported, so a refresh that adds it too can be recognised. -1: unknown.
+        snap_count: integer

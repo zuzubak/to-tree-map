@@ -271,6 +271,7 @@ def main() -> None:
                 # the corrected value, since reconciliation compares against the City.
                 "city": (r[2] if r[1] == "species"
                          else r[3] if r[1] == "dbh"
+                         else None if r[1] == "add"
                          else {"address": r[4], "street": r[5],
                                "lon": r[7], "lat": r[8]}),
             }

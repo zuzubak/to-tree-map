@@ -1040,3 +1040,37 @@ html, body {
 }
 .report-primary:hover { filter: brightness(1.08); border-color: var(--series-cleared); }
 .report-primary:disabled { opacity: 0.6; cursor: default; }
+
+/* ---- Add a missing tree ---------------------------------------------------- */
+
+.add-tree-control a.add-tree-btn {
+  width: auto; padding: 0 10px 0 8px;
+  display: flex; align-items: center; gap: 6px;
+  font: 600 12px system-ui, -apple-system, "Segoe UI", sans-serif;
+  color: var(--text-primary); background: var(--surface-1);
+  text-decoration: none; white-space: nowrap;
+}
+.add-tree-control a.add-tree-btn span[aria-hidden] { font-size: 16px; font-weight: 500; }
+.add-tree-control a.add-tree-btn.is-active { color: #fff; background: var(--series-cleared); }
+@media (max-width: 640px) { .add-tree-label { display: none; } .add-tree-control a.add-tree-btn { padding: 0; justify-content: center; } }
+
+.add-banner {
+  position: absolute; z-index: 650; top: 14px; left: 50%; transform: translateX(-50%);
+  display: flex; align-items: center; gap: 10px;
+  padding: 7px 8px 7px 14px; border-radius: 999px;
+  background: var(--surface-1); color: var(--text-primary);
+  border: 1px solid var(--border); box-shadow: 0 1px 6px rgba(0, 0, 0, 0.14);
+  font-size: 13px; font-weight: 500; white-space: nowrap;
+}
+.add-banner[hidden] { display: none; }
+.add-banner-cancel {
+  font: inherit; font-size: 12px; color: var(--text-secondary);
+  background: none; border: 1px solid var(--border); border-radius: 999px;
+  padding: 3px 10px; cursor: pointer;
+}
+@media (max-width: 640px) { .add-banner { top: 64px; } }
+.leaflet-container.is-adding { cursor: crosshair; }
+
+.add-hint { margin-top: 0; padding-top: 0; border-top: 0; font-size: 11px; }
+.report-sub { font-weight: 600; margin: 12px 0 4px; }
+.report-add > .report-sub:first-child { margin-top: 0; }

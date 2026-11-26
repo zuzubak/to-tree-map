@@ -1,7 +1,8 @@
-/* "Report a problem with this tree" -- a short form that lives inside the tree popup.
+/* "Report a problem with this tree" -- a short form that lives inside the tree popup --
+ * and "Add a missing tree", the same form opened at a spot on the map instead of a tree.
  *
- * Two screens: pick what's wrong, then give the right value (plus an optional note and
- * email) and send. Reports go to TREE_REPORT_URL, which forwards them for review by
+ * Two screens: pick what's wrong (or, when adding, confirm the tree is the City's), then
+ * give the details (plus an optional note and email) and send. Reports go to TREE_REPORT_URL, which forwards them for review by
  * hand; nothing a reader sends changes the map until it has been approved.
  *
  * Along with the fix, every report carries a snapshot of what the popup showed -- species,
@@ -22,6 +23,10 @@
     { kind: "address", label: "The address is wrong" },
     { kind: "other", label: "Something else" },
   ];
+
+  // The City's inventory is the road allowance: everything between the curb and the
+  // property line. A tree past the property line is private and the City doesn't track it.
+  const BOULEVARD_HELP = "The City's part of the street runs from the curb to the property line, sidewalk included. Trees past the property line are private, and the City doesn't record them.";
 
   const REMOVE_REASONS = [
     ["stump", "It was cut down: there's a stump or an empty planting spot"],
@@ -84,8 +89,15 @@
     return foot;
   }
 
+  /* The add form: `ctx.tree` is the spot the reader tapped, with the nearest tree's address
+   * as a starting suggestion. */
+  function addForm(ctx, close) {
+    return mount(Object.assign({}, ctx, { mode: "add" }), close);
+  }
+
   function mount(ctx, close) {
     const t = ctx.tree;
+    const adding = ctx.mode === "add";
     const shown = ctx.shown || t; // what the reader was looking at
     const root = h("form", { class: "report", novalidate: true });
     // Leaflet listens for +/- and arrows on the document while the map has focus.
@@ -96,7 +108,7 @@
     root.addEventListener("click", (e) => e.stopPropagation());
     root.addEventListener("submit", (e) => e.preventDefault());
     // Warm the STRUCTID lookup while they type, so Send doesn't wait on it.
-    const structId = ctx.structId().catch(() => null);
+    const structId = adding ? Promise.resolve(null) : ctx.structId().catch(() => null);
 
     const draft = { kind: null };
     // Whatever the current step needs tidied before it is replaced (the Turnstile widget).
@@ -114,6 +126,7 @@
 
     function step1() {
       ctx.preview(null);
+      if (adding) return boulevard();
       show(
         h("div", { class: "report-q", text: "What's wrong with this record?" }),
         h("div", { class: "report-choices" },
@@ -125,6 +138,55 @@
         h("div", { class: "report-actions" },
           h("button", { type: "button", class: "report-btn", text: "Cancel", onclick: finish })),
       );
+    }
+
+    function boulevard() {
+      show(
+        h("div", { class: "report-q", text: "Is the tree between the curb and the property line?" }),
+        h("div", { class: "report-help report-help-top", text: BOULEVARD_HELP }),
+        h("div", { class: "report-choices" },
+          h("button", { type: "button", class: "report-choice", onclick: addDetails },
+            h("span", { text: "Yes, it's on the City's side" })),
+          h("button", { type: "button", class: "report-choice", onclick: privateTree },
+            h("span", { text: "No, it's on private property" })),
+        ),
+        h("div", { class: "report-actions" },
+          h("button", { type: "button", class: "report-btn", text: "Cancel", onclick: finish })),
+      );
+    }
+
+    function privateTree() {
+      show(
+        h("div", { class: "report-q", text: "Then it isn't one for this map." }),
+        h("div", { class: "report-help report-help-top", text: "The map shows the City's own street trees, from its inventory. Private trees aren't in it, so there's nothing here to add. Thanks for looking, though." }),
+        h("div", { class: "report-actions" },
+          h("button", { type: "button", class: "report-btn", text: "Back", onclick: boulevard }),
+          h("button", { type: "button", class: "report-btn report-primary", text: "Close", onclick: finish })),
+      );
+    }
+
+    function addDetails() {
+      const sp = fieldsFor("species");
+      const dbh = fieldsFor("dbh");
+      const adr = fieldsFor("address");
+      sendStep({
+        q: "Tell me about the tree",
+        el: h("div", { class: "report-add" },
+          h("div", { class: "report-sub", text: sp.q }), sp.el,
+          h("div", { class: "report-sub", text: dbh.q }), dbh.el,
+          h("div", { class: "report-sub", text: adr.q }), adr.el),
+        read: () => {
+          const parts = [sp.read(), dbh.read(), adr.read()];
+          const bad = parts.find((p) => p.error);
+          if (bad) return bad;
+          const proposed = Object.assign({}, ...parts.map((p) => p.proposed), { lat: t.lat, lon: t.lon });
+          // How many trees of this genus the City has at that address now, so a refresh
+          // that adds this same tree can be recognised (see int_tree_corrections.sql).
+          proposed.genus_counts = ctx.genusCounts(proposed.address, proposed.street);
+          return { proposed, measured: parts[1].measured };
+        },
+        back: boulevard,
+      });
     }
 
     /* Each kind contributes a fieldset and a read() returning {proposed, error}. */
@@ -155,8 +217,10 @@
           el: h("div", {},
             input, h("datalist", { id: listId }, options),
             h("label", { class: "report-check" }, unsure,
-              h("span", { text: `I don't know, but it isn't ${article(shown.common || shown.botanical)}` })),
-            h("div", { class: "report-help", text: "Only species already in the City's inventory are listed. Not there? Pick “Something else” instead." }),
+              h("span", { text: adding ? "I don't know what it is" : `I don't know, but it isn't ${article(shown.common || shown.botanical)}` })),
+            h("div", { class: "report-help", text: adding
+              ? "Only species already in the City's inventory are listed. Not there? Tick “I don't know” and describe it in the note."
+              : "Only species already in the City's inventory are listed. Not there? Pick “Something else” instead." }),
           ),
           read: () => {
             if (unsure.checked) return { proposed: { botanical: null, unsure: true } };
@@ -187,6 +251,10 @@
         };
         const update = () => {
           const d = diameter();
+          if (adding) {
+            readout.textContent = d === null ? "Leave it empty if you can't measure it." : `That's about ${d} cm across.`;
+            return;
+          }
           readout.textContent = d === null
             ? (shown.dbh ? `The map has ${shown.dbh} cm across, about ${Math.round(shown.dbh * Math.PI)} cm around.` : "The map has no trunk size for it.")
             : `That's about ${d} cm across` + (shown.dbh ? `; the map has ${shown.dbh} cm.` : ".");
@@ -194,7 +262,7 @@
         for (const n of [value, unit, across]) n.addEventListener("input", update);
         update();
         return {
-          q: "How big is the trunk?",
+          q: adding ? "How big is the trunk? (optional)" : "How big is the trunk?",
           el: h("div", {},
             h("div", { class: "report-help report-help-top", text: "Wrap a tape around the trunk at chest height (1.4 m) and enter the distance around it." }),
             h("div", { class: "report-row" }, value, unit),
@@ -203,9 +271,10 @@
           ),
           read: () => {
             const d = diameter();
+            if (d === null && adding) return { proposed: { dbh_cm: null } };
             if (d === null) return { error: "Enter the measurement." };
             if (d < 1 || d > 300) return { error: "That works out to " + d + " cm across, which can't be right. Check the unit?" };
-            if (d === shown.dbh) return { error: "That matches what the map shows." };
+            if (d === shown.dbh && !adding) return { error: "That matches what the map shows." };
             return {
               proposed: { dbh_cm: d },
               measured: { value: parseFloat(value.value), unit: unit.value, how: across.checked ? "across" : "around" },
@@ -233,7 +302,9 @@
         // The City places each tree at its address, so a new address means a new spot on
         // the map. Look it up as they type, and draw where the dot would go.
         const found = h("div", { class: "report-help", "aria-live": "polite",
-          text: "The address of the property the tree stands in front of." });
+          text: adding
+            ? "The property the tree stands in front of. Filled in from the nearest tree on the map, so check it."
+            : "The address of the property the tree stands in front of." });
         let place = null;
         let seq = 0;
         let timer = null;
@@ -243,7 +314,7 @@
           ctx.preview(null);
           const n = parseInt(number.value, 10);
           const s = street.value.trim();
-          if (!(n > 0) || s.length < 3 || (n === shown.address && s.toUpperCase() === shown.street)) return;
+          if (!(n > 0) || s.length < 3 || (!adding && n === shown.address && s.toUpperCase() === shown.street)) return;
           timer = setTimeout(async () => {
             const mine = ++seq;
             found.textContent = "Looking it up…";
@@ -259,6 +330,11 @@
                 return;
               }
               place = r;
+              if (adding) {
+                // The new tree goes where it was tapped; the address only labels it.
+                found.textContent = `Found ${r.label} in the City's address list.`;
+                return;
+              }
               ctx.preview(r);
               found.textContent = `Found ${r.label}. The dot moves about ${distance(t, r)} ${bearing(t, r)}.`;
               ctx.resize();
@@ -269,15 +345,17 @@
         };
         number.addEventListener("input", lookup);
         street.addEventListener("input", lookup);
+        if (adding) lookup(); // check the suggested address straight away
 
         return {
-          q: "What's the right address?",
+          q: adding ? "What's the address?" : "What's the right address?",
           el: h("div", {}, h("div", { class: "report-row" }, number, street), found),
           read: () => {
             const n = parseInt(number.value, 10);
             const s = street.value.trim().toUpperCase().replace(/\s+/g, " ");
             if (!(n > 0) || !s) return { error: "Enter a street number and a street." };
-            if (n === shown.address && s === shown.street) return { error: "That's the address the map already shows." };
+            if (!adding && n === shown.address && s === shown.street) return { error: "That's the address the map already shows." };
+            if (adding) return { proposed: { address: n, street: s, known_street: ctx.streets.includes(s), ward: place ? place.ward : null } };
             return { proposed: {
               address: n, street: s, known_street: ctx.streets.includes(s),
               lat: place ? place.lat : null, lon: place ? place.lon : null,
@@ -291,7 +369,13 @@
 
     function step2() {
       const f = fieldsFor(draft.kind);
-      const other = draft.kind === "other";
+      sendStep({ q: f.q, el: f.el, read: f.read, back: step1 });
+    }
+
+    /* The shared last step: the kind's fields, then note, email, bot check and Send. */
+    function sendStep(f) {
+      const kind = adding ? "add" : draft.kind;
+      const other = kind === "other";
       const note = h("textarea", {
         class: "report-input report-note", rows: other ? 4 : 2, maxlength: "1000",
         placeholder: other ? "Tell me what's wrong" : "Anything else? (optional)",
@@ -321,7 +405,7 @@
         try {
           const report = {
             v: 1,
-            kind: draft.kind,
+            kind,
             proposed: r.proposed,
             measured: r.measured || null,
             note: note.value.trim() || null,
@@ -337,7 +421,7 @@
             body: JSON.stringify(report),
           });
           if (!resp.ok) throw new Error((await resp.json().catch(() => ({}))).error || resp.status);
-          rememberSent(t.key);
+          if (!adding) rememberSent(t.key);
           done();
         } catch (e) {
           bot.reset(); // a Turnstile token is good for one try
@@ -358,7 +442,7 @@
         botBox,
         error,
         h("div", { class: "report-actions" },
-          h("button", { type: "button", class: "report-btn", text: "Back", onclick: step1 }),
+          h("button", { type: "button", class: "report-btn", text: "Back", onclick: f.back }),
           send),
       );
       leaving = () => bot.remove();
@@ -447,5 +531,5 @@
     return (/^[aeiou]/.test(n) ? "an " : "a ") + n;
   }
 
-  window.TreeReport = { button };
+  window.TreeReport = { button, addForm };
 })();
