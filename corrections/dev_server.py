@@ -672,8 +672,16 @@ class Handler(SimpleHTTPRequestHandler):
             if os.environ.get("TURNSTILE_SITE_KEY"):
                 lines.append(f"window.TURNSTILE_SITE_KEY = {json.dumps(os.environ['TURNSTILE_SITE_KEY'])};")
             return self.send(200, (existing + "\n" + "\n".join(lines) + "\n").encode(), "text/javascript")
-        if path in ("/header.js", "/map-search.js"):
-            return self.send(200, b"/* shared site script: served by malcolmkennedy.com in production */", "text/javascript")
+        # The shared address search lives at the site root in production. Fetched from
+        # there so adding a tree by searching its address works locally too.
+        if path == "/map-search.js":
+            try:
+                with urllib.request.urlopen("https://malcolmkennedy.com/map-search.js", timeout=10) as resp:
+                    return self.send(200, resp.read(), "text/javascript")
+            except OSError:
+                return self.send(200, b"/* map-search.js unavailable offline */", "text/javascript")
+        if path == "/header.js":
+            return self.send(200, b"/* shared site header: served by malcolmkennedy.com in production */", "text/javascript")
 
         if path == "/dev/inbox":
             out = sorted((STATE / "outbox").glob("*.json"), reverse=True) if (STATE / "outbox").exists() else []

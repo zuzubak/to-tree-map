@@ -1322,8 +1322,10 @@ function reportContext(i) {
 
 /* ------------------------------------------------------------------ adding a tree ------ */
 
-/* "Add a missing tree": a button on the map puts it in a mode where the next tap opens
- * the add form at that spot. Too far out to place a trunk, a tap zooms in instead. */
+/* "Add a missing tree": a button on the map puts it in adding mode. The reader searches
+ * the tree's address in the search bar (or, already zoomed in, taps the spot), and a pin
+ * drops there with the form beside it. Dragging the pin, or tapping again, moves it
+ * without losing what has been typed. */
 const ADD_ZOOM = 17;
 const adding = { on: false, banner: null, marker: null, popup: null, tree: null };
 
@@ -1357,21 +1359,40 @@ function setupAddTree() {
 }
 
 function addingText() {
-  return map.getZoom() >= ADD_ZOOM ? "Tap the map where the trunk is" : "Tap the street to zoom in, then tap the trunk";
+  return map.getZoom() >= ADD_ZOOM
+    ? "Search the tree's address, or tap where the trunk is"
+    : "Search the tree's address in the search bar above";
+}
+
+function setBanner(text) {
+  adding.banner.querySelector(".add-banner-text").textContent = text;
+}
+
+/* Point the reader at the search bar: highlight it, and focus it on a desktop (on a
+ * phone, focusing would throw the keyboard up before they've read the prompt). */
+function promptSearch() {
+  const box = el("search");
+  box.classList.remove("is-prompting");
+  void box.offsetWidth; // restart the highlight animation
+  box.classList.add("is-prompting");
+  const input = box.querySelector("input");
+  if (input && window.matchMedia("(pointer: fine)").matches) input.focus();
 }
 
 function startAdding() {
   closePopup();
   adding.on = true;
   adding.banner.hidden = false;
-  adding.banner.querySelector(".add-banner-text").textContent = addingText();
+  setBanner(addingText());
   map.getContainer().classList.add("is-adding");
   document.querySelector(".add-tree-btn").classList.add("is-active");
+  if (map.getZoom() < ADD_ZOOM) promptSearch();
 }
 
 function stopAdding() {
   adding.on = false;
   adding.banner.hidden = true;
+  el("search").classList.remove("is-prompting");
   map.getContainer().classList.remove("is-adding");
   const btn = document.querySelector(".add-tree-btn");
   if (btn) btn.classList.remove("is-active");
@@ -1380,40 +1401,49 @@ function stopAdding() {
   adding.tree = null;
 }
 
-function placeAddition(latlng) {
-  if (map.getZoom() < ADD_ZOOM) {
-    map.setView(latlng, 19);
-    adding.banner.querySelector(".add-banner-text").textContent = "Now tap where the trunk is";
+/* Called by the search bar while adding. */
+function addAtSearchResult(r) {
+  const latlng = L.latLng(r.lat, r.lon);
+  if (adding.popup && adding.tree) { moveAddition(latlng); map.setView(latlng, Math.max(map.getZoom(), 19)); return; }
+  map.setView(latlng, 19, { animate: false });
+  placeAddition(latlng, r);
+}
+
+/* A map tap while adding. Zoomed out, a tap can't place a trunk, so it points back at
+ * the search bar instead. */
+function placeAddition(latlng, searched) {
+  if (adding.popup && adding.tree) return moveAddition(latlng);
+  if (!searched && map.getZoom() < ADD_ZOOM) {
+    setBanner("Search the tree's address first");
+    promptSearch();
     return;
   }
-  // A second tap while the form is open moves the spot and keeps what's been typed.
-  if (adding.popup && adding.tree) {
-    adding.tree.lat = +latlng.lat.toFixed(7);
-    adding.tree.lon = +latlng.lng.toFixed(7);
-    adding.marker.setLatLng(latlng);
-    adding.popup.setLatLng(latlng);
-    return;
-  }
-  if (adding.marker) map.removeLayer(adding.marker);
   adding.banner.hidden = true;
+  el("search").classList.remove("is-prompting");
 
-  const colour = cssVar("--series-cleared");
-  adding.marker = L.circleMarker(latlng, {
-    radius: 8, color: colour, weight: 2, dashArray: "3 3", fillColor: colour, fillOpacity: 0.2, interactive: false,
+  // A draggable pin, so the reader can nudge it onto the trunk.
+  adding.marker = L.marker(latlng, {
+    draggable: true, keyboard: false, autoPan: true, title: "Drag onto the trunk",
+    icon: L.divIcon({ className: "add-pin", html: "<span></span>", iconSize: [22, 22], iconAnchor: [11, 11] }),
   }).addTo(map);
+  adding.marker.on("drag", (e) => moveAddition(e.target.getLatLng(), true));
 
+  // The address: what they searched, in the City's spelling, else the nearest tree's.
   const near = nearestTree(latlng.lat, latlng.lng, 80);
+  const nearStreet = near >= 0 && trees.details ? streetName(trees.street[near]) : null;
+  const fromSearch = searched ? cityAddress(searched.label, nearStreet) : null;
   const ctx = {
     tree: {
       lat: +latlng.lat.toFixed(7),
       lon: +latlng.lng.toFixed(7),
       payload: meta.generated_at,
       botanical: null, common: null, dbh: 0,
-      address: near >= 0 && trees.details ? (trees.addr[near] || null) : null,
-      street: near >= 0 && trees.details ? streetName(trees.street[near]) : null,
+      address: fromSearch ? fromSearch.address : near >= 0 && trees.details ? (trees.addr[near] || null) : null,
+      street: fromSearch ? fromSearch.street : nearStreet,
       cross: near >= 0 && trees.details ? [streetName(trees.cross1[near]), streetName(trees.cross2[near])].filter(Boolean) : [],
       ward: near >= 0 ? (trees.ward[near] || null) : null,
     },
+    addressFrom: fromSearch ? "search" : "nearest",
     taxa: meta.taxa,
     streets: meta.streets,
     genusCounts,
@@ -1429,15 +1459,49 @@ function placeAddition(latlng) {
   title.textContent = "Add a missing tree";
   const hint = document.createElement("div");
   hint.className = "popup-description add-hint";
-  hint.textContent = "Not quite the spot? Tap the map again to move it.";
+  hint.textContent = searched
+    ? "The pin is on the address. Drag it onto the trunk."
+    : "Not quite the spot? Drag the pin, or tap the map.";
   wrap.append(title, hint);
   wrap.appendChild(TreeReport.addForm(ctx, stopAdding));
 
   adding.popup = L.popup({
     autoPan: true, maxWidth: 280, closeButton: true, closeOnClick: false,
+    offset: L.point(0, -6),  // tip sits just above the pin, not on it
     maxHeight: Math.max(240, map.getSize().y - 70),
   }).setLatLng(latlng).setContent(wrap).openOn(map);
   adding.popup.once("remove", () => { if (adding.popup) { adding.popup = null; stopAdding(); } });
+}
+
+function moveAddition(latlng, dragging) {
+  adding.tree.lat = +latlng.lat.toFixed(7);
+  adding.tree.lon = +latlng.lng.toFixed(7);
+  if (!dragging) adding.marker.setLatLng(latlng);
+  adding.popup.setLatLng(latlng);
+}
+
+/* "67 Torrance Road" from the search bar, in the City's spelling: "67 TORRANCE RD". The
+ * City abbreviates street types and directions, and some names carry a former
+ * municipality ("HILLSIDE DR EAST YORK"), so the match is against the City's own list,
+ * preferring the nearest tree's street when several fit. */
+const STREET_TYPES = {
+  AVENUE: "AVE", ROAD: "RD", DRIVE: "DR", CRESCENT: "CRES", STREET: "ST", COURT: "CRT",
+  PLACE: "PL", BOULEVARD: "BLVD", TRAIL: "TRL", GATE: "GT", SQUARE: "SQ", TERRACE: "TER",
+  CIRCLE: "CRCL", GARDENS: "GDNS", GROVE: "GRV", HEIGHTS: "HTS", PARKWAY: "PKWY", PATHWAY: "PTWY",
+};
+const DIRECTIONS = { EAST: "E", WEST: "W", NORTH: "N", SOUTH: "S" };
+
+function cityAddress(label, nearStreet) {
+  const m = /^(\d+)[A-Za-z]?\s+(.+)$/.exec((label || "").trim());
+  if (!m) return null;
+  const words = m[2].toUpperCase().replace(/[.,]/g, "").split(/\s+/);
+  let dir = "";
+  if (words.length > 1 && DIRECTIONS[words[words.length - 1]]) dir = DIRECTIONS[words.pop()];
+  if (words.length > 1 && STREET_TYPES[words[words.length - 1]]) words.push(STREET_TYPES[words.pop()]);
+  const name = words.join(" ") + (dir ? " " + dir : "");
+  const fits = meta.streets.filter((s) => s === name || s.startsWith(name + " "));
+  const street = fits.includes(name) ? name : fits.includes(nearStreet) ? nearStreet : fits[0] || name;
+  return { address: parseInt(m[1], 10), street };
 }
 
 /* The closest tree within `metres`, for a starting guess at the address. */
@@ -1735,7 +1799,7 @@ function setupMapInteraction() {
   map.on("mouseout", () => { tip.hidden = true; });
   map.on("moveend zoomend", writeHash);
   map.on("zoomend", () => {
-    if (adding.on && !adding.popup) adding.banner.querySelector(".add-banner-text").textContent = addingText();
+    if (adding.on && !adding.popup) setBanner(addingText());
   });
 }
 
@@ -1833,7 +1897,9 @@ async function main() {
       container: "#search",
       placeholder: "Search an address",
       onSelect: (r) => {
-        if (found) map.removeLayer(found);
+        if (found) { map.removeLayer(found); found = null; }
+        // Adding a tree: the search places its pin rather than a marker.
+        if (adding.on) return addAtSearchResult(r);
         found = L.circleMarker([r.lat, r.lon], {
           radius: 9, color: "#d1495b", weight: 3, fillColor: "#d1495b", fillOpacity: 0.25,
         }).addTo(map);

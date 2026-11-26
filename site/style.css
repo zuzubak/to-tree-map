@@ -1055,7 +1055,7 @@ html, body {
 @media (max-width: 640px) { .add-tree-label { display: none; } .add-tree-control a.add-tree-btn { padding: 0; justify-content: center; } }
 
 .add-banner {
-  position: absolute; z-index: 650; top: 14px; left: 50%; transform: translateX(-50%);
+  position: absolute; z-index: 650; top: 60px; /* below the search bar it points at, never over it */ left: 50%; transform: translateX(-50%);
   display: flex; align-items: center; gap: 10px;
   padding: 7px 8px 7px 14px; border-radius: 999px;
   background: var(--surface-1); color: var(--text-primary);
@@ -1068,9 +1068,34 @@ html, body {
   background: none; border: 1px solid var(--border); border-radius: 999px;
   padding: 3px 10px; cursor: pointer;
 }
-@media (max-width: 640px) { .add-banner { top: 64px; } }
 .leaflet-container.is-adding { cursor: crosshair; }
 
 .add-hint { margin-top: 0; padding-top: 0; border-top: 0; font-size: 11px; }
 .report-sub { font-weight: 600; margin: 12px 0 4px; }
 .report-add > .report-sub:first-child { margin-top: 0; }
+
+/* The pin for a tree being added: draggable, so a ring with a solid centre reads as
+   something to grab rather than a tree. */
+.add-pin span {
+  display: block; width: 22px; height: 22px; box-sizing: border-box;
+  border-radius: 50%; border: 3px solid var(--series-cleared);
+  background: radial-gradient(circle, var(--series-cleared) 0 3px, rgba(255, 255, 255, 0.85) 4px);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35);
+  cursor: grab;
+}
+.leaflet-dragging .add-pin span { cursor: grabbing; }
+
+/* "Search the tree's address": a pulse on the search bar it points at. */
+.map-search.is-prompting { border-radius: 8px; animation: search-prompt 1.6s ease-out 2; }
+@keyframes search-prompt {
+  0% { box-shadow: 0 0 0 0 rgba(42, 120, 214, 0.55); }
+  100% { box-shadow: 0 0 0 12px rgba(42, 120, 214, 0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .map-search.is-prompting { animation: none; box-shadow: 0 0 0 2px var(--series-cleared); }
+}
+/* Phones: the search bar spans the width, so the banner sits under it, clear of the
+   zoom and add buttons on the left, and wraps instead of running off-screen. */
+@media (max-width: 640px) {
+  .add-banner { left: 56px; right: 14px; transform: none; white-space: normal; border-radius: 12px; }
+}

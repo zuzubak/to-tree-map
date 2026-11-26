@@ -303,7 +303,7 @@
         // the map. Look it up as they type, and draw where the dot would go.
         const found = h("div", { class: "report-help", "aria-live": "polite",
           text: adding
-            ? "The property the tree stands in front of. Filled in from the nearest tree on the map, so check it."
+            ? (ctx.addressFrom === "search" ? "The property the tree stands in front of, from your search. Change it if the tree is in front of a neighbour." : "The property the tree stands in front of. Filled in from the nearest tree on the map, so check it.")
             : "The address of the property the tree stands in front of." });
         let place = null;
         let seq = 0;
