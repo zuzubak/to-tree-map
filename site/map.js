@@ -1594,7 +1594,7 @@ function renderLegend() {
       const entry = state.compare[i];
       html += `<div class="compare-slot" data-filled="${!!entry}">` +
         `<span class="swatch" style="background:${palette.css[i + 1]}"></span>` +
-        `<span class="compare-name">${entry ? entry.label : "Pick one from the list above"}</span>` +
+        `<span class="compare-name">${entry ? entry.label : "Pick one from the list below"}</span>` +
         (entry ? `<span class="compare-count">${fmtCompact.format(entry.count)}</span>` +
                  `<button type="button" class="compare-remove" data-remove="${i}" aria-label="Remove ${entry.label}">&times;</button>` : "") +
         '</div>';
