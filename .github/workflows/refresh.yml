@@ -46,9 +46,6 @@ jobs:
       contents: read
       pages: write
       id-token: write
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
 
@@ -113,5 +110,28 @@ jobs:
         with:
           path: site
 
+  # Deploying in its own job, and retrying once, works around a GitHub race
+  # (actions/deploy-pages#451): run straight after the upload in the same job, the
+  # deploy can look for the artifact before GitHub lists it, fail with "No artifacts
+  # named github-pages", and a re-run can't recover because it uploads a second copy.
+  # A separate job looks it up seconds later; the retry covers the slower days.
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url || steps.retry.outputs.page_url }}
+    steps:
       - id: deployment
+        uses: actions/deploy-pages@v4
+        continue-on-error: true
+
+      - if: steps.deployment.outcome == 'failure'
+        run: sleep 30
+
+      - id: retry
+        if: steps.deployment.outcome == 'failure'
         uses: actions/deploy-pages@v4

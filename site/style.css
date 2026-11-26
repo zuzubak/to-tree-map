@@ -1120,22 +1120,12 @@ html, body {
   .add-banner { top: 56px; left: 56px; right: 10px; transform: none; white-space: normal; border-radius: 12px; font-size: 13px; }
 }
 
-/* The shared search widget paints its results list white but never sets a text colour,
-   so in dark mode each result's address inherited white and vanished. Pin the colour,
-   and give it dark-mode surfaces to match the rest of the page. */
-.map-search .ms-item { color: #111; }
+/* Dark mode for the shared search widget (/map-search.js), through the colour
+   variables it reads. Its defaults are light, for the pages that have no dark mode. */
 @media (prefers-color-scheme: dark) {
-  .map-search .ms-input,
-  .map-search .ms-list { background: var(--surface-1); color: var(--text-primary); border-color: var(--border); }
-  .map-search .ms-item { color: var(--text-primary); border-bottom-color: var(--gridline); }
-  .map-search .ms-item.ms-on,
-  .map-search .ms-item:hover { background: rgba(57, 135, 229, 0.2); }
-  .map-search .ms-item span,
-  .map-search .ms-note { color: var(--text-muted); }
-  .map-search .ms-clear { color: var(--text-muted); }
-  .map-search .ms-credit { background: var(--page-plane); border-top-color: var(--gridline); }
-  .map-search .ms-credit a { color: var(--text-muted); }
+  .map-search {
+    --ms-bg: var(--surface-1); --ms-fg: var(--text-primary); --ms-muted: var(--text-muted);
+    --ms-border: var(--border); --ms-rule: var(--gridline); --ms-hover: rgba(57, 135, 229, 0.2);
+    --ms-credit-bg: var(--page-plane); --ms-accent: var(--series-cleared); --ms-scheme: dark;
+  }
 }
-/* The widget draws its own clear button; hide the browser's built-in one for search
-   inputs, which otherwise shows as a second × beside it. */
-.map-search .ms-input::-webkit-search-cancel-button { -webkit-appearance: none; appearance: none; }
