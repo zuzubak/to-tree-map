@@ -941,10 +941,13 @@ html, body {
    centred, so this goes top-right. Widget and dropdown styling come from the
    shared /map-search.js. */
 .map-search {
-  position: absolute; z-index: 600;
+  /* Above Leaflet's controls (z-index 1000), so its results list is never covered by
+     the zoom or add buttons. */
+  position: absolute; z-index: 1100;
   top: 14px; right: 14px; width: 250px; max-width: calc(100% - 28px);
 }
-@media (max-width: 640px) { .map-search { width: auto; left: 14px; } }
+/* Phones: full width, but starting right of the zoom buttons rather than under them. */
+@media (max-width: 640px) { .map-search { width: auto; top: 10px; left: 56px; right: 10px; max-width: none; } }
 
 /* ---- Report a problem ----------------------------------------------------
    A short form that replaces the popup's body (the heading stays). See report.js. */
@@ -1052,10 +1055,27 @@ html, body {
 }
 .add-tree-control a.add-tree-btn span[aria-hidden] { font-size: 16px; font-weight: 500; }
 .add-tree-control a.add-tree-btn.is-active { color: #fff; background: var(--series-cleared); }
-@media (max-width: 640px) { .add-tree-label { display: none; } .add-tree-control a.add-tree-btn { padding: 0; justify-content: center; } }
+/* While adding, the + turns into a × that cancels. */
+.add-tree-control a.add-tree-btn span[aria-hidden] { display: inline-block; transition: transform 160ms ease; }
+.add-tree-control a.add-tree-btn.is-active span[aria-hidden] { transform: rotate(45deg); }
+
+/* Phones: a round button with just the +, filled so it can't be mistaken for zoom. */
+@media (max-width: 640px) {
+  .add-tree-label { display: none; }
+  .leaflet-touch .add-tree-control.leaflet-bar { border: 0; margin-top: 12px; box-shadow: none; background: none; }
+  .add-tree-control a.add-tree-btn,
+  .leaflet-touch .add-tree-control a.add-tree-btn {
+    width: 40px; height: 40px; padding: 0; justify-content: center;
+    border-radius: 50%; border: 0;
+    color: #fff; background: var(--series-cleared);
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+  }
+  .add-tree-control a.add-tree-btn span[aria-hidden] { font-size: 26px; font-weight: 400; line-height: 1; margin-top: -2px; }
+}
 
 .add-banner {
-  position: absolute; z-index: 650; top: 60px; /* below the search bar it points at, never over it */ left: 50%; transform: translateX(-50%);
+  /* Under the search bar (1100), so its results list covers this, not the reverse. */
+  position: absolute; z-index: 1050; top: 60px; /* below the search bar it points at, never over it */ left: 50%; transform: translateX(-50%);
   display: flex; align-items: center; gap: 10px;
   padding: 7px 8px 7px 14px; border-radius: 999px;
   background: var(--surface-1); color: var(--text-primary);
@@ -1094,8 +1114,28 @@ html, body {
 @media (prefers-reduced-motion: reduce) {
   .map-search.is-prompting { animation: none; box-shadow: 0 0 0 2px var(--series-cleared); }
 }
-/* Phones: the search bar spans the width, so the banner sits under it, clear of the
-   zoom and add buttons on the left, and wraps instead of running off-screen. */
+/* Phones: the search bar spans the width, so the banner sits under it, lined up with
+   it and clear of the buttons on the left, and wraps instead of running off-screen. */
 @media (max-width: 640px) {
-  .add-banner { left: 56px; right: 14px; transform: none; white-space: normal; border-radius: 12px; }
+  .add-banner { top: 56px; left: 56px; right: 10px; transform: none; white-space: normal; border-radius: 12px; font-size: 13px; }
 }
+
+/* The shared search widget paints its results list white but never sets a text colour,
+   so in dark mode each result's address inherited white and vanished. Pin the colour,
+   and give it dark-mode surfaces to match the rest of the page. */
+.map-search .ms-item { color: #111; }
+@media (prefers-color-scheme: dark) {
+  .map-search .ms-input,
+  .map-search .ms-list { background: var(--surface-1); color: var(--text-primary); border-color: var(--border); }
+  .map-search .ms-item { color: var(--text-primary); border-bottom-color: var(--gridline); }
+  .map-search .ms-item.ms-on,
+  .map-search .ms-item:hover { background: rgba(57, 135, 229, 0.2); }
+  .map-search .ms-item span,
+  .map-search .ms-note { color: var(--text-muted); }
+  .map-search .ms-clear { color: var(--text-muted); }
+  .map-search .ms-credit { background: var(--page-plane); border-top-color: var(--gridline); }
+  .map-search .ms-credit a { color: var(--text-muted); }
+}
+/* The widget draws its own clear button; hide the browser's built-in one for search
+   inputs, which otherwise shows as a second × beside it. */
+.map-search .ms-input::-webkit-search-cancel-button { -webkit-appearance: none; appearance: none; }

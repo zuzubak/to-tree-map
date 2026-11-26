@@ -1358,10 +1358,21 @@ function setupAddTree() {
   document.addEventListener("keydown", (e) => { if (e.key === "Escape" && adding.on) stopAdding(); });
 }
 
+const isPhone = () => window.matchMedia("(max-width: 640px)").matches;
+const isSheet = () => window.matchMedia("(max-width: 860px)").matches;
+
 function addingText() {
-  return map.getZoom() >= ADD_ZOOM
-    ? "Search the tree's address, or tap where the trunk is"
-    : "Search the tree's address in the search bar above";
+  if (map.getZoom() >= ADD_ZOOM) return isPhone() ? "Search the address, or tap the trunk" : "Search the tree's address, or tap where the trunk is";
+  return isPhone() ? "Search the tree's address above" : "Search the tree's address in the search bar above";
+}
+
+/* How much of the map the mobile sheet covers, so the add form stays in the part
+ * that shows. */
+function sheetCover() {
+  if (!isSheet()) return 0;
+  const panel = el("panel").getBoundingClientRect();
+  const pane = el("map-pane").getBoundingClientRect();
+  return Math.max(0, pane.bottom - panel.top);
 }
 
 function setBanner(text) {
@@ -1381,6 +1392,8 @@ function promptSearch() {
 
 function startAdding() {
   closePopup();
+  // On a phone the sheet takes half the screen; fold it to its handle while adding.
+  if (isSheet() && sheet) sheet.setState("minimized");
   adding.on = true;
   adding.banner.hidden = false;
   setBanner(addingText());
@@ -1465,10 +1478,15 @@ function placeAddition(latlng, searched) {
   wrap.append(title, hint);
   wrap.appendChild(TreeReport.addForm(ctx, stopAdding));
 
+  const covered = sheetCover();
   adding.popup = L.popup({
     autoPan: true, maxWidth: 280, closeButton: true, closeOnClick: false,
     offset: L.point(0, -6),  // tip sits just above the pin, not on it
-    maxHeight: Math.max(240, map.getSize().y - 70),
+    // Keep the form out from under the search bar and the mobile sheet; it scrolls
+    // inside itself when the screen is short.
+    autoPanPaddingTopLeft: L.point(10, isPhone() ? 60 : 10),
+    autoPanPaddingBottomRight: L.point(10, covered + 10),
+    maxHeight: Math.max(220, map.getSize().y - covered - (isPhone() ? 130 : 70)),
   }).setLatLng(latlng).setContent(wrap).openOn(map);
   adding.popup.once("remove", () => { if (adding.popup) { adding.popup = null; stopAdding(); } });
 }
@@ -1805,8 +1823,10 @@ function setupMapInteraction() {
 
 /* The draggable mobile sheet lives in panel.js, shared with the analysis pages in
  * the site. All this page adds is what to re-measure once it settles. */
+let sheet = null;
+
 function setupPanel() {
-  SheetPanel.setup({
+  sheet = SheetPanel.setup({
     onResize: () => {
       if (!map) return;
       map.invalidateSize();
