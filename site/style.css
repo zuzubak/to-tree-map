@@ -945,3 +945,98 @@ html, body {
   top: 14px; right: 14px; width: 250px; max-width: calc(100% - 28px);
 }
 @media (max-width: 640px) { .map-search { width: auto; left: 14px; } }
+
+/* ---- Report a problem ----------------------------------------------------
+   A short form that replaces the popup's body (the heading stays). See report.js. */
+
+.popup-corrected { font-style: normal; }
+
+.report-foot {
+  margin-top: 8px;
+  padding-top: 6px;
+  border-top: 1px solid var(--gridline);
+}
+.report-open {
+  font: inherit; font-size: 11px;
+  color: var(--text-secondary);
+  background: none; border: 0; padding: 2px 0;
+  cursor: pointer;
+  text-decoration: underline;
+  text-decoration-color: var(--gridline);
+  text-underline-offset: 3px;
+}
+.report-open:hover { color: var(--text-primary); text-decoration-color: currentColor; }
+
+/* Fixed width so the popup doesn't jump narrower and wider between steps. */
+.report { margin-top: 6px; width: 256px; max-width: 100%; }
+.report-q { font-weight: 600; margin: 2px 0 8px; }
+.report-choices { display: flex; flex-direction: column; gap: 4px; }
+
+.report-choice {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 1px;
+  width: 100%;
+  font: inherit; text-align: left;
+  color: var(--text-primary);
+  background: var(--page-plane);
+  border: 1px solid var(--border); border-radius: 5px;
+  padding: 7px 9px;
+  cursor: pointer;
+}
+.report-choice:hover { border-color: var(--text-muted); }
+.report-choice small { color: var(--text-muted); font-size: 11px; }
+
+.report-radio, .report-check {
+  display: flex; align-items: flex-start; gap: 7px;
+  line-height: 1.35; cursor: pointer;
+}
+.report-radio {
+  border: 1px solid var(--border); border-radius: 5px;
+  padding: 6px 8px;
+  background: var(--page-plane);
+}
+.report-radio:has(input:checked) { border-color: var(--series-cleared); }
+.report-check { margin-top: 7px; color: var(--text-secondary); }
+.report-radio input, .report-check input { margin: 2px 0 0; flex: none; accent-color: var(--series-cleared); }
+
+.report-input {
+  display: block; width: 100%;
+  font: inherit; font-size: 13px;
+  color: var(--text-primary);
+  background: var(--page-plane);
+  border: 1px solid var(--border); border-radius: 5px;
+  padding: 6px 8px;
+  margin-top: 5px;
+}
+.report-input:focus { outline: 2px solid var(--series-cleared); outline-offset: -1px; }
+.report-note { resize: vertical; min-height: 38px; }
+.report-row { display: flex; gap: 6px; }
+.report-row .report-input { margin-top: 0; }
+.report-row .report-num { flex: 0 0 72px; }
+.report-row .report-unit { flex: 0 0 64px; }
+.report-row .report-input:not(.report-num):not(.report-unit) { flex: 1; min-width: 0; }
+/* iOS zooms the page into any input set smaller than 16px. */
+@media (pointer: coarse) { .report-input { font-size: 16px; } }
+
+.report-help { color: var(--text-muted); font-size: 11px; line-height: 1.4; margin-top: 4px; }
+.report-help-top { margin: 0 0 6px; }
+.report-gap { height: 4px; }
+.report-error { color: var(--series-invasive); font-size: 11px; margin-top: 6px; }
+.report-error:empty { display: none; }
+.report-trap { position: absolute; left: -9999px; width: 1px; height: 1px; opacity: 0; }
+
+.report-actions { display: flex; justify-content: space-between; gap: 8px; margin-top: 10px; }
+.report-btn {
+  font: inherit; font-weight: 500;
+  color: var(--text-primary);
+  background: none;
+  border: 1px solid var(--border); border-radius: 5px;
+  padding: 5px 12px;
+  cursor: pointer;
+}
+.report-btn:hover { border-color: var(--text-muted); }
+.report-primary {
+  margin-left: auto;
+  color: #fff; background: var(--series-cleared); border-color: var(--series-cleared);
+}
+.report-primary:hover { filter: brightness(1.08); border-color: var(--series-cleared); }
+.report-primary:disabled { opacity: 0.6; cursor: default; }

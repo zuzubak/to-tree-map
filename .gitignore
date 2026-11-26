@@ -30,3 +30,6 @@ site/config.js
 ml/.venv/
 ml/data/
 ml/.venv-torch/
+
+# Local state for corrections/dev_server.py: reports, fake outbox, signing secret
+corrections/.dev/

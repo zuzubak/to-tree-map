@@ -38,3 +38,26 @@ seeds:
         raw_lower: varchar
         canonical_name: varchar
         reason: varchar
+    # Reader-reported fixes, approved by hand. One row per approved report; see
+    # models/staging/int_tree_corrections.sql for how each is reconciled against a refresh.
+    tree_corrections:
+      +column_types:
+        correction_id: varchar
+        struct_id: varchar
+        kind: varchar
+        approved_at: timestamp
+        snap_botanical: varchar
+        snap_dbh_cm: integer
+        snap_address: integer
+        snap_street: varchar
+        snap_lon: double
+        snap_lat: double
+        new_botanical: varchar
+        new_dbh_cm: integer
+        new_address: integer
+        new_street: varchar
+        # An address fix moves the dot: the City places every tree at its address, so the
+        # new position is worked out from the corrected address at approval time.
+        new_lon: double
+        new_lat: double
+        new_ward: varchar

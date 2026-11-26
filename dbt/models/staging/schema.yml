@@ -1,0 +1,29 @@
+version: 2
+
+models:
+  - name: int_tree_corrections
+    description: >
+      Approved reader corrections, each reconciled against the current City inventory.
+      Statuses other than applied / city_agrees / replaced mean the City changed the record
+      since the correction was approved, or the tree can't be found: the correction is
+      not applied, and the build warns so it gets a look.
+    columns:
+      - name: correction_id
+        tests: [unique, not_null]
+      - name: kind
+        tests:
+          - accepted_values:
+              values: ['remove', 'species', 'dbh', 'address']
+      - name: status
+        tests:
+          - accepted_values:
+              name: tree_corrections_need_attention
+              values: ['applied', 'city_agrees', 'replaced']
+              config:
+                severity: warn
+
+  - name: int_street_trees
+    description: stg_street_trees with applied corrections laid over it.
+    columns:
+      - name: struct_id
+        tests: [unique, not_null]

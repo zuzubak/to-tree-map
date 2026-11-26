@@ -7,7 +7,7 @@
 -- block next to each other, which is exactly when they share a street name and a species.
 
 with trees as (
-    select * from {{ ref('stg_street_trees') }}
+    select * from {{ ref('int_street_trees') }}
 ),
 
 taxa as (

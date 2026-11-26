@@ -1211,13 +1211,127 @@ function popupContent(i) {
     wrap.appendChild(row);
   }
 
+  for (const c of correctionsByTree.get(i) || []) {
+    const note = document.createElement("div");
+    note.className = "popup-description popup-corrected";
+    note.textContent = correctionText(c);
+    wrap.appendChild(note);
+  }
+
   if (t.notes) {
     const note = document.createElement("div");
     note.className = "popup-description";
     note.textContent = t.notes + ".";
     wrap.appendChild(note);
   }
+
+  // Everything below the heading is what the report form stands in for while it's open.
+  const body = document.createElement("div");
+  while (wrap.children.length > 2) body.appendChild(wrap.children[2]);
+  wrap.appendChild(body);
+  const foot = window.TreeReport && TreeReport.button(reportContext(i), body, wrap);
+  if (foot) wrap.appendChild(foot);
   return wrap;
+}
+
+/* ------------------------------------------------------------------ reader reports ----- */
+
+/* Approved corrections in effect, by tree row, so the popup can say so. */
+const correctionsByTree = new Map();
+
+function indexCorrections() {
+  for (const c of meta.corrections || []) {
+    if (!correctionsByTree.has(c.i)) correctionsByTree.set(c.i, []);
+    correctionsByTree.get(c.i).push(c);
+  }
+}
+
+function correctionText(c) {
+  const month = new Date(c.approved + "T12:00:00").toLocaleDateString("en-CA", { month: "short", year: "numeric" });
+  const city = c.kind === "species"
+    ? ((meta.taxa.find((x) => x.botanical === c.city) || {}).common || c.city)
+    : c.kind === "dbh" ? (c.city ? `${c.city} cm` : "no trunk size")
+    : ([c.city.address, c.city.street].filter(Boolean).join(" ") || "no address");
+  const what = { species: "Species", dbh: "Trunk size", address: "Address" }[c.kind] || "Record";
+  return `${what} corrected from a reader's report (${month}). The City's record says ${city}.`;
+}
+
+/* The City's STRUCTID for a tree, which is what a report names it by: row numbers change
+ * at every refresh, STRUCTIDs don't. Fetched a shard at a time, and only when someone
+ * opens the report form. */
+const idShards = new Map();
+
+function structIdFor(i) {
+  const spec = meta.ids;
+  if (!spec) return Promise.reject(new Error("no ids in this payload"));
+  const shard = Math.floor(i / spec.shard);
+  if (!idShards.has(shard)) {
+    const file = `${spec.dir}/${String(shard).padStart(2, "0")}.txt.gz`;
+    const p = loadColumn(file, Uint8Array).then((bytes) => new TextDecoder().decode(bytes).split("\n"));
+    p.catch(() => idShards.delete(shard));
+    idShards.set(shard, p);
+  }
+  return idShards.get(shard).then((ids) => ids[i - shard * spec.shard]);
+}
+
+/* What the report snapshots is the City's record, not what the map shows: reconciliation
+ * compares the snapshot against the City's data at each refresh, so on a tree that
+ * already carries a correction, the corrected field is swapped back to the City's value. */
+function reportContext(i) {
+  const t = meta.taxa[trees.taxon[i]];
+  const tree = {
+    key: `${meta.generated_at}:${i}`,
+    index: i,
+    payload: meta.generated_at,
+    lat: +trees.lat[i].toFixed(7),
+    lon: +trees.lon[i].toFixed(7),
+    botanical: t.botanical,
+    common: t.common,
+    dbh: trees.dbh[i] || 0,
+    address: trees.details ? (trees.addr[i] || null) : null,
+    street: trees.details ? streetName(trees.street[i]) : null,
+    cross: trees.details ? [streetName(trees.cross1[i]), streetName(trees.cross2[i])].filter(Boolean) : [],
+    ward: trees.ward[i] || null,
+    corrected: [],
+  };
+  // The form compares the reader's answer with what they were shown, so keep that too.
+  const shown = { botanical: tree.botanical, common: tree.common, dbh: tree.dbh, address: tree.address, street: tree.street };
+  for (const c of correctionsByTree.get(i) || []) {
+    tree.corrected.push(c.kind);
+    if (c.kind === "species") {
+      tree.botanical = c.city;
+      tree.common = (meta.taxa.find((x) => x.botanical === c.city) || {}).common || null;
+    } else if (c.kind === "dbh") {
+      tree.dbh = c.city || 0;
+    } else if (c.kind === "address") {
+      // Moved trees snapshot the City's position as well as its address.
+      Object.assign(tree, { address: c.city.address, street: c.city.street, lon: c.city.lon, lat: c.city.lat });
+    }
+  }
+  return {
+    tree,
+    shown,
+    taxa: meta.taxa,
+    streets: meta.streets,
+    structId: () => structIdFor(i),
+    resize: () => { if (openPopup) openPopup.update(); },
+    preview: (to) => previewMove(i, to),
+  };
+}
+
+/* While an address fix is being entered, show where the dot would move: a dashed line
+ * from the tree to the new spot. Cleared with the popup. */
+let previewLayer = null;
+
+function previewMove(i, to) {
+  if (previewLayer) { map.removeLayer(previewLayer); previewLayer = null; }
+  if (!to) return;
+  const from = [trees.lat[i], trees.lon[i]];
+  const colour = cssVar("--series-cleared");
+  previewLayer = L.layerGroup([
+    L.polyline([from, [to.lat, to.lon]], { color: colour, weight: 2, dashArray: "4 4", interactive: false }),
+    L.circleMarker([to.lat, to.lon], { radius: 7, color: colour, weight: 2, fillColor: colour, fillOpacity: 0.25, interactive: false }),
+  ]).addTo(map);
 }
 
 /* ------------------------------------------------------------------ UI: panel ---------- */
@@ -1395,6 +1509,7 @@ function findTreeNear(lat, lon) {
 /* ------------------------------------------------------------------ interaction --------- */
 
 function closePopup() {
+  previewMove(-1, null);
   state.selectedTree = -1;
   if (openPopup) { map.closePopup(openPopup); openPopup = null; }
   if (treeLayer) treeLayer.draw();
@@ -1428,6 +1543,7 @@ function setupMapInteraction() {
 
   map.on("popupclose", (e) => {
     if (e.popup === openPopup) {
+      previewMove(-1, null);
       openPopup = null;
       state.selectedTree = -1;
       treeLayer.draw();
@@ -1535,6 +1651,7 @@ async function main() {
   }
 
   trees.n = meta.tree_count;
+  indexCorrections();
 
   const hash = readHash();
   if (hash && hash.mode) state.colourMode = hash.mode;

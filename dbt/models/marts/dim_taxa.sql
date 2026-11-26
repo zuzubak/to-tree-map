@@ -11,7 +11,7 @@
 -- than guessing, because "Acer" alone could be a sugar maple or a Norway maple.
 
 with trees as (
-    select * from {{ ref('stg_street_trees') }}
+    select * from {{ ref('int_street_trees') }}
 ),
 
 -- What a tree of this kind normally measures, for the popup's size comparison.

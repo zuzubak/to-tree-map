@@ -19,6 +19,11 @@ Layout -- one file per attribute, row i of every file describing the same tree:
     cross2.u16.gz   index into meta.streets for the second cross street
     ward.u8.gz      1-25, 0 = not recorded
 
+Plus, outside that layout, the City's STRUCTID for each tree in ids/NN.txt.gz -- one per
+line, in the same row order, in shards of ID_SHARD rows. Only the "report a problem" form
+needs it, to name the tree in a way that survives a refresh, so it is fetched one shard at
+a time when a report is sent rather than shipped with the map (it is ~2 MB in total).
+
 Everything is gzipped here and inflated in the browser with DecompressionStream. GitHub
 Pages won't negotiate gzip for application/octet-stream, so compressing in the file itself
 is the only way to avoid shipping 20 MB.
@@ -43,6 +48,7 @@ OUT_DIR = ROOT / "site" / "data"
 
 COORD_SCALE = 10_000_000  # 1e7 -> ~1 cm
 U16_MAX = 65_535
+ID_SHARD = 16_384  # rows per STRUCTID shard: ~40 KB gzipped each
 
 # Genera that get their own colour on the map; everything else falls into "Other". Twelve
 # covers about three quarters of the inventory, which is as many hues as stay distinguishable
@@ -83,7 +89,7 @@ def main() -> None:
     trees = con.execute(
         """
         select taxon_id, dbh_cm, lon, lat, address, street_name,
-               cross_street_1, cross_street_2, ward
+               cross_street_1, cross_street_2, ward, struct_id
         from street_trees
         order by tree_index
         """
@@ -133,6 +139,55 @@ def main() -> None:
         "cross2.u16": write_column("cross2.u16", encode(cross2_names)),
         "ward.u8": write_column("ward.u8", ward),
     }
+
+    ids_dir = OUT_DIR / "ids"
+    ids_dir.mkdir(exist_ok=True)
+    for old in ids_dir.glob("*.txt.gz"):
+        old.unlink()
+    struct_ids = list(trees["struct_id"])
+    for shard, start in enumerate(range(0, n, ID_SHARD)):
+        body = "\n".join(struct_ids[start:start + ID_SHARD]).encode()
+        with (ids_dir / f"{shard:02d}.txt.gz").open("wb") as fh:
+            with gzip.GzipFile(filename="", mode="wb", compresslevel=9, fileobj=fh, mtime=0) as gz:
+                gz.write(body)
+    id_shards = -(-n // ID_SHARD)
+    print(f"  ids/NN.txt.gz    {id_shards} shards of {ID_SHARD:,}")
+
+    # Reader corrections in effect, so the popup can say a record differs from the City's
+    # and what the City has. Keyed by row; only the 'applied' ones touch the map.
+    correction_rows = con.execute(
+        """
+        select s.tree_index, c.kind, c.city_botanical, c.city_dbh_cm, c.city_address,
+               c.city_street, c.approved_at, c.city_lon, c.city_lat
+        from int_tree_corrections c
+        join street_trees s on s.struct_id = c.city_struct_id
+        where c.status = 'applied'
+        order by s.tree_index, c.kind
+        """
+    ).fetchall()
+    # Every correction's reconciliation status, for the review side to list the ones a
+    # refresh has overtaken. Public, so it carries the fix and never the reporter.
+    status_rows = con.execute(
+        """
+        select correction_id, struct_id, kind, status, matched_by, approved_at::varchar as approved_at,
+               snap_botanical, city_botanical, new_botanical,
+               snap_dbh_cm, city_dbh_cm, new_dbh_cm,
+               snap_address, snap_street, city_address, city_street, new_address, new_street,
+               city_lon, city_lat, new_lon, new_lat
+        from int_tree_corrections order by approved_at
+        """
+    ).fetchall()
+    status_cols = [d[0] for d in con.description]
+    (OUT_DIR / "corrections.json").write_text(json.dumps(
+        {"corrections": [dict(zip(status_cols, r)) for r in status_rows]},
+        separators=(",", ":"), default=str,
+    ))
+
+    correction_status = dict(con.execute(
+        "select status, count(*) from int_tree_corrections group by 1 order by 1"
+    ).fetchall())
+    if correction_status:
+        print(f"  corrections      {correction_status}")
 
     # ---- metadata -------------------------------------------------------------------
     taxa_rows = con.execute(
@@ -207,6 +262,20 @@ def main() -> None:
             "bounds": [float(lon.min()), float(lat.min()), float(lon.max()), float(lat.max())],
         },
         "columns": columns,
+        "ids": {"dir": "ids", "shard": ID_SHARD, "count": id_shards},
+        "corrections": [
+            {
+                "i": int(r[0]), "kind": r[1], "approved": str(r[6])[:10],
+                # What the City's own record holds for the corrected field. The popup
+                # shows it, and a further report on this tree snapshots it instead of
+                # the corrected value, since reconciliation compares against the City.
+                "city": (r[2] if r[1] == "species"
+                         else r[3] if r[1] == "dbh"
+                         else {"address": r[4], "street": r[5],
+                               "lon": r[7], "lat": r[8]}),
+            }
+            for r in correction_rows
+        ],
         "taxa": [
             {
                 "id": r[0], "botanical": r[1], "common": r[2], "genus": r[3],
