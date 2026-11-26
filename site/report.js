@@ -99,8 +99,13 @@
     const structId = ctx.structId().catch(() => null);
 
     const draft = { kind: null };
+    // Whatever the current step needs tidied before it is replaced (the Turnstile widget).
+    let leaving = () => {};
+    const finish = () => { leaving(); leaving = () => {}; close(); };
 
     function show(...kids) {
+      leaving();
+      leaving = () => {};
       root.replaceChildren(...kids);
       ctx.resize();
       const first = root.querySelector("input:not([type=hidden]):not([tabindex='-1']), textarea, button.report-choice");
@@ -118,7 +123,7 @@
           }, h("span", { text: k.label }), k.hint ? h("small", { text: k.hint }) : null)),
         ),
         h("div", { class: "report-actions" },
-          h("button", { type: "button", class: "report-btn", text: "Cancel", onclick: close })),
+          h("button", { type: "button", class: "report-btn", text: "Cancel", onclick: finish })),
       );
     }
 
@@ -300,6 +305,9 @@
       const trap = h("input", { type: "text", name: "website", tabindex: "-1", autocomplete: "off", class: "report-trap", "aria-hidden": "true" });
       const error = h("div", { class: "report-error", role: "alert" });
       const send = h("button", { type: "submit", class: "report-btn report-primary", text: "Send report" });
+      // Cloudflare Turnstile. Invisible unless it wants a click, which most people never see.
+      const botBox = h("div", { class: "report-bot" });
+      const bot = botCheck(botBox, ctx.resize);
 
       send.addEventListener("click", async () => {
         error.textContent = "";
@@ -319,6 +327,7 @@
             note: note.value.trim() || null,
             email: email.value.trim() || null,
             website: trap.value,
+            turnstile: await bot.token(),
             tree: Object.assign({}, t, { struct_id: await structId }),
             page: location.href,
           };
@@ -331,6 +340,7 @@
           rememberSent(t.key);
           done();
         } catch (e) {
+          bot.reset(); // a Turnstile token is good for one try
           send.disabled = false;
           send.textContent = "Send report";
           error.textContent = "Couldn't send that (" + e.message + "). Try again in a moment?";
@@ -343,26 +353,75 @@
         other ? null : h("div", { class: "report-gap" }),
         note,
         email,
-        h("div", { class: "report-help", text: "Only so I can ask a follow-up question. Never published." }),
+        h("div", { class: "report-help", text: "For any follow up questions" }),
         trap,
+        botBox,
         error,
         h("div", { class: "report-actions" },
           h("button", { type: "button", class: "report-btn", text: "Back", onclick: step1 }),
           send),
       );
+      leaving = () => bot.remove();
     }
 
     function done() {
       show(
-        h("div", { class: "report-q", text: "Thanks, that's on its way." }),
-        h("div", { class: "report-help report-help-top", text: "Every report is checked by hand. If it's right, the map is fixed at its next rebuild, usually within a day." }),
+        h("div", { class: "report-q", text: "Thanks! I'll have a look." }),
+        h("div", { class: "report-help report-help-top", text: "Once approved, changes should show up within a day." }),
         h("div", { class: "report-actions" },
-          h("button", { type: "button", class: "report-btn report-primary", text: "Done", onclick: close })),
+          h("button", { type: "button", class: "report-btn report-primary", text: "Done", onclick: finish })),
       );
     }
 
     step1();
     return root;
+  }
+
+  /* Cloudflare Turnstile, loaded only once someone reaches the send step. With no site key
+   * configured (localhost against dev_server.py) it does nothing and sends no token. */
+  let turnstileLoad = null;
+  function loadTurnstile() {
+    if (!turnstileLoad) {
+      turnstileLoad = new Promise((resolve, reject) => {
+        const s = document.createElement("script");
+        s.src = "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit";
+        s.async = true;
+        s.onload = () => resolve(window.turnstile);
+        s.onerror = () => { turnstileLoad = null; reject(new Error("bot check unavailable")); };
+        document.head.appendChild(s);
+      });
+    }
+    return turnstileLoad;
+  }
+
+  function botCheck(box, onResize) {
+    const key = window.TURNSTILE_SITE_KEY;
+    if (!key) return { token: async () => null, reset() {}, remove() {} };
+    let widget = null;
+    let current = null;
+    let gone = false;
+    const waiters = [];
+    const settle = (v) => { current = v; waiters.splice(0).forEach((w) => w(v)); };
+    loadTurnstile().then((ts) => {
+      if (gone) return;
+      widget = ts.render(box, {
+        sitekey: key,
+        size: "compact",                  // 150 px wide if it ever shows: fits the popup
+        appearance: "interaction-only",
+        callback: settle,
+        "expired-callback": () => { current = null; },
+        "error-callback": () => settle(null),
+        "before-interactive-callback": onResize,
+        "after-interactive-callback": onResize,
+      });
+    }).catch(() => settle(null));
+    return {
+      // Usually ready long before Send is pressed; waits up to 15 s if not.
+      token: () => current ? Promise.resolve(current)
+        : new Promise((resolve) => { waiters.push(resolve); setTimeout(() => resolve(current), 15000); }),
+      reset: () => { current = null; if (widget !== null) window.turnstile.reset(widget); },
+      remove: () => { gone = true; if (widget !== null) window.turnstile.remove(widget); widget = null; },
+    };
   }
 
   function distance(a, b) {

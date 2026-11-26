@@ -34,6 +34,7 @@ import sys
 import threading
 import time
 import math
+import os
 import urllib.parse
 import urllib.request
 from datetime import datetime, timezone
@@ -47,7 +48,7 @@ SEED = ROOT / "dbt" / "seeds" / "tree_corrections.csv"
 PY = sys.executable
 PORT = 8000
 
-REVIEWER = "zuzubak@gmail.com"
+REVIEWER = "mkennedytoronto@gmail.com"
 PUBLIC_MAP = "https://malcolmkennedy.com/to-tree-map/"
 KINDS = {"remove", "species", "dbh", "address", "other"}
 APPLY_KINDS = ("remove", "species", "dbh", "address")
@@ -580,9 +581,13 @@ class Handler(SimpleHTTPRequestHandler):
         path = url.path
 
         if path == "/config.js":
+            # TREE_REPORT_URL / TURNSTILE_SITE_KEY in the environment point the local map at
+            # the real Worker instead of this server's own /api/report.
             existing = (SITE / "config.js").read_text() if (SITE / "config.js").exists() else ""
-            return self.send(200, (existing + '\nwindow.TREE_REPORT_URL = "/api/report";\n').encode(),
-                             "text/javascript")
+            lines = [f"window.TREE_REPORT_URL = {json.dumps(os.environ.get('TREE_REPORT_URL', '/api/report'))};"]
+            if os.environ.get("TURNSTILE_SITE_KEY"):
+                lines.append(f"window.TURNSTILE_SITE_KEY = {json.dumps(os.environ['TURNSTILE_SITE_KEY'])};")
+            return self.send(200, (existing + "\n" + "\n".join(lines) + "\n").encode(), "text/javascript")
         if path in ("/header.js", "/map-search.js"):
             return self.send(200, b"/* shared site script: served by malcolmkennedy.com in production */", "text/javascript")
 

@@ -88,14 +88,21 @@ jobs:
       # site/config.js is gitignored, so the deployed copy is written here from the secret.
       # Without it the map falls back to Esri's keyless basemap rather than to CARTO's
       # "API KEY REQUIRED" watermark tile.
-      - name: Write basemap config
+      # Also where the "Report a problem" link is switched on: it only appears when
+      # TREE_REPORT_URL is set. Both values are public (the browser sends them anyway);
+      # the Worker behind them is corrections/worker/.
+      - name: Write site config
         env:
           CARTO_API_KEY: ${{ secrets.CARTO_API_KEY }}
         run: |
           if [ -z "$CARTO_API_KEY" ]; then
             echo "::warning::CARTO_API_KEY secret is not set; falling back to the Esri basemap."
           fi
-          echo "window.CARTO_API_KEY = \"$CARTO_API_KEY\";" > site/config.js
+          {
+            echo "window.CARTO_API_KEY = \"$CARTO_API_KEY\";"
+            echo 'window.TREE_REPORT_URL = "https://tree-reports.tree-reports.workers.dev/report";'
+            echo 'window.TURNSTILE_SITE_KEY = "0x4AAAAAAGUnV-F5aLvaMzIf";'
+          } > site/config.js
 
       - uses: actions/configure-pages@v5
 

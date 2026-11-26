@@ -1,0 +1,37 @@
+// The reader-report backend for the tree map. Same routes and behaviour as
+// corrections/dev_server.py, which stands in for it on localhost.
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "tree-reports",
+  "main": "src/index.js",
+  "compatibility_date": "2026-11-01",
+  "observability": { "enabled": true },
+
+  // Pending and decided reports. D1 rather than KV for Time Travel: the database can be
+  // restored to any minute of the last 7 days (30 on a paid plan).
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "tree-reports",
+      "database_id": "527103b7-4d48-4c4d-941a-20c65975c998",
+      "migrations_dir": "migrations"
+    }
+  ],
+
+  // Daily: forget reporters' email addresses 90 days after a decision, and old rate-limit hits.
+  "triggers": { "crons": ["17 9 * * *"] },
+
+  // Public settings. Secrets (RESEND_API_KEY, GITHUB_TOKEN, REVIEW_SECRET,
+  // TURNSTILE_SECRET) are set with `wrangler secret put`, never written here.
+  "vars": {
+    "REVIEWER": "mkennedytoronto@gmail.com",
+    // Resend's shared sender works without verifying a domain, but only delivers to the
+    // address the Resend account was opened with -- which is exactly who it mails.
+    "MAIL_FROM": "Toronto tree map <onboarding@resend.dev>",
+    "PUBLIC_MAP": "https://malcolmkennedy.com/to-tree-map/",
+    "GITHUB_REPO": "zuzubak/to-tree-map",
+    "GITHUB_BRANCH": "master",
+    "SEED_PATH": "dbt/seeds/tree_corrections.csv",
+    "ALLOWED_ORIGINS": "https://malcolmkennedy.com,http://localhost:8000"
+  }
+}

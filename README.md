@@ -406,6 +406,49 @@ takes the network to 5,278 km and the city's median density from 9.55 to 10.73 t
 100 m. The few trees genuinely on a laneway are not lost; they snap to whichever real
 street runs within 60 m.
 
+## Reader corrections
+
+Every tree popup ends in "Report a problem with this tree": a two-step form for no tree
+here, wrong species, wrong trunk size, wrong address, or anything else. Nothing a reader
+sends touches the map until it has been approved by hand.
+
+```
+popup form ──▶ Worker (corrections/worker/) ──▶ email with a review link
+                 Turnstile, rate limits, D1        │
+                                                   ▼
+            map rebuilds ◀── push to master ◀── Approve: one row appended to
+                                                dbt/seeds/tree_corrections.csv
+```
+
+**Corrections are a layer, not an edit.** The City's data is never changed;
+`int_street_trees` re-applies every approved row on every build. Each row is keyed on
+STRUCTID — the City's asset id; OBJECTID and `_id` are row numbers that get reissued —
+and snapshots what the map showed the reader. At each refresh `int_tree_corrections`
+compares that snapshot with the City's current record: unchanged means the fix applies,
+a match with the fix means the City made it too, and any other change means an
+inspector was there more recently, so **the City wins**. Fixes that stop applying make
+the build warn and show in orange at `/corrections` on the Worker. A vanished STRUCTID
+falls back to a fingerprint (species, address, position within ~3 m), used only when it
+picks out exactly one tree.
+
+**An address fix moves the dot**, since the City places trees by address. The new spot
+comes from the City's own geocoder, the one behind map.toronto.ca, keeping the tree's
+offset from its old address point so the dot stays at the curb; the review page has a
+satellite map to drag it onto the actual tree. The block-level analysis pages still use
+the City's positions.
+
+**What is kept where.** Approved corrections live in git: public, with history, and no
+reporter details. Pending reports live in D1, which restores to any minute of the last
+7 days, and each one is also in the review email. Reporters' email addresses are
+dropped 90 days after a decision.
+
+`python corrections/dev_server.py` runs the whole loop on localhost with a fake inbox
+and a local rebuild. Deploying the Worker needs Node 18+ and `npx wrangler deploy` from
+`corrections/worker/`; its secrets (`RESEND_API_KEY`, `GITHUB_TOKEN`, `REVIEW_SECRET`,
+`TURNSTILE_SECRET`) are set with `wrangler secret put`. The GitHub token is fine-grained,
+limited to this repo's contents, and expires: when it does, approvals fail with an
+error and the report stays pending until a new one is set.
+
 ## Running locally
 
 ```bash
