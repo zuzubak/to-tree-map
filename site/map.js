@@ -1324,8 +1324,9 @@ function reportContext(i) {
 
 /* "Add a missing tree": a button on the map puts it in adding mode. The reader searches
  * the tree's address in the search bar (or, already zoomed in, taps the spot), and a pin
- * drops there with the form beside it. Dragging the pin, or tapping again, moves it
- * without losing what has been typed. */
+ * drops there with the form beside it. Dragging the pin, or searching again, moves it
+ * without losing what has been typed. A tap on the map doesn't: a stray click to close
+ * the search results or focus the map could otherwise throw the pin a street away. */
 const ADD_ZOOM = 17;
 const adding = { on: false, banner: null, marker: null, popup: null, tree: null };
 
@@ -1425,7 +1426,7 @@ function addAtSearchResult(r) {
 /* A map tap while adding. Zoomed out, a tap can't place a trunk, so it points back at
  * the search bar instead. */
 function placeAddition(latlng, searched) {
-  if (adding.popup && adding.tree) return moveAddition(latlng);
+  if (adding.popup && adding.tree) return; // placed: only a drag or a new search moves it
   if (!searched && map.getZoom() < ADD_ZOOM) {
     setBanner("Search the tree's address first");
     promptSearch();
@@ -1474,7 +1475,7 @@ function placeAddition(latlng, searched) {
   hint.className = "popup-description add-hint";
   hint.textContent = searched
     ? "The pin is on the address. Drag it onto the trunk."
-    : "Not quite the spot? Drag the pin, or tap the map.";
+    : "Not quite the spot? Drag the pin onto the trunk.";
   wrap.append(title, hint);
   wrap.appendChild(TreeReport.addForm(ctx, stopAdding));
 
