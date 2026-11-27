@@ -240,33 +240,39 @@
         });
         const unit = h("select", { class: "report-input report-unit", "aria-label": "Unit" },
           h("option", { value: "cm", text: "cm" }), h("option", { value: "in", text: "in" }));
-        const across = h("input", { type: "checkbox" });
+        // Which measurement they took: around the trunk or straight across it.
+        const mode = (v, label, on) => h("label", { class: "report-seg-opt" },
+          h("input", { type: "radio", name: "dbh-mode", value: v, checked: on }), h("span", { text: label }));
+        const toggle = h("div", { class: "report-seg", role: "radiogroup", "aria-label": "Measurement" },
+          mode("around", "Circumference", true), mode("across", "Diameter", false));
+        const isDiameter = () => toggle.querySelector("input:checked").value === "across";
         const readout = h("div", { class: "report-help", "aria-live": "polite" });
 
         const diameter = () => {
           const raw = parseFloat(value.value);
           if (!(raw > 0)) return null;
           const cm = raw * (unit.value === "in" ? 2.54 : 1);
-          return Math.round(across.checked ? cm : cm / Math.PI);
+          return Math.round(isDiameter() ? cm : cm / Math.PI);
         };
         const update = () => {
           const d = diameter();
+          const said = d === null ? "" : isDiameter() ? `That's ${d} cm across.` : `That's about ${d} cm across.`;
           if (adding) {
-            readout.textContent = d === null ? "Leave it empty if you can't measure it." : `That's about ${d} cm across.`;
+            readout.textContent = d === null ? "Leave it empty if you can't measure it." : said;
             return;
           }
           readout.textContent = d === null
-            ? (shown.dbh ? `The map has ${shown.dbh} cm across, about ${Math.round(shown.dbh * Math.PI)} cm around.` : "The map has no trunk size for it.")
-            : `That's about ${d} cm across` + (shown.dbh ? `; the map has ${shown.dbh} cm.` : ".");
+            ? (shown.dbh ? `The map has a ${shown.dbh} cm diameter, about ${Math.round(shown.dbh * Math.PI)} cm around.` : "The map has no trunk size for it.")
+            : said.replace(/\.$/, "") + (shown.dbh ? `; the map has ${shown.dbh} cm.` : ".");
         };
-        for (const n of [value, unit, across]) n.addEventListener("input", update);
+        for (const n of [value, unit, toggle]) n.addEventListener("input", update);
+        toggle.addEventListener("change", update);
         update();
         return {
           q: adding ? "How big is the trunk? (optional)" : "How big is the trunk?",
           el: h("div", {},
-            h("div", { class: "report-help report-help-top", text: "Wrap a tape around the trunk at chest height (1.4 m) and enter the distance around it." }),
+            toggle,
             h("div", { class: "report-row" }, value, unit),
-            h("label", { class: "report-check" }, across, h("span", { text: "I measured straight across, not around" })),
             readout,
           ),
           read: () => {
@@ -277,7 +283,7 @@
             if (d === shown.dbh && !adding) return { error: "That matches what the map shows." };
             return {
               proposed: { dbh_cm: d },
-              measured: { value: parseFloat(value.value), unit: unit.value, how: across.checked ? "across" : "around" },
+              measured: { value: parseFloat(value.value), unit: unit.value, how: isDiameter() ? "across" : "around" },
             };
           },
         };
@@ -383,7 +389,8 @@
       });
       const email = h("input", {
         type: "email", class: "report-input", autocomplete: "email", maxlength: "200",
-        placeholder: "Your email (optional)", "aria-label": "Your email (optional)",
+        placeholder: "Your email (optional, for follow-ups)",
+        "aria-label": "Your email, optional, in case I have a follow-up question",
       });
       // Bots fill every field; people never see this one.
       const trap = h("input", { type: "text", name: "website", tabindex: "-1", autocomplete: "off", class: "report-trap", "aria-hidden": "true" });
@@ -437,7 +444,6 @@
         other ? null : h("div", { class: "report-gap" }),
         note,
         email,
-        h("div", { class: "report-help", text: "For any follow up questions" }),
         trap,
         botBox,
         error,

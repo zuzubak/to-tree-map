@@ -1129,3 +1129,21 @@ html, body {
     --ms-credit-bg: var(--page-plane); --ms-accent: var(--series-cleared); --ms-scheme: dark;
   }
 }
+
+/* Circumference / Diameter: a two-way toggle for which measurement was taken. */
+.report-seg {
+  display: flex; margin: 0 0 6px;
+  border: 1px solid var(--border); border-radius: 5px; overflow: hidden;
+}
+.report-seg-opt { flex: 1; cursor: pointer; }
+.report-seg-opt input { position: absolute; opacity: 0; pointer-events: none; }
+.report-seg-opt span {
+  display: block; padding: 5px 8px; text-align: center;
+  color: var(--text-secondary); background: var(--page-plane);
+}
+.report-seg-opt + .report-seg-opt span { border-left: 1px solid var(--border); }
+.report-seg-opt input:checked + span { color: #fff; background: var(--series-cleared); font-weight: 500; }
+.report-seg-opt input:focus-visible + span { outline: 2px solid var(--series-cleared); outline-offset: -2px; }
+/* Phones set the field itself to 16px so iOS doesn't zoom in on focus; the hint can
+   stay smaller, which keeps "Your email (optional, for follow-ups)" from being cut off. */
+.report-input::placeholder { font-size: 13px; }
