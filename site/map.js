@@ -1477,6 +1477,9 @@ function placeAddition(latlng, searched) {
     ? "The pin is on the address. Drag it onto the trunk."
     : "Not quite the spot? Drag the pin onto the trunk.";
   wrap.append(title, hint);
+  // Once it's sent, the heading and the drag hint have done their job; the thanks
+  // stands on its own.
+  ctx.onSent = () => { title.hidden = true; hint.hidden = true; };
   wrap.appendChild(TreeReport.addForm(ctx, stopAdding));
 
   const covered = sheetCover();

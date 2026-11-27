@@ -455,6 +455,7 @@
     }
 
     function done() {
+      if (ctx.onSent) ctx.onSent();
       show(
         h("div", { class: "report-q", text: "Thanks! I'll have a look." }),
         h("div", { class: "report-help report-help-top", text: "Once approved, changes should show up within a day." }),
